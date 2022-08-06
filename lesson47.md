@@ -112,7 +112,7 @@ STATIC_URL = '/static/'
 
 Для начала нам необходим аккаунт на платформе AWS (Amazon Web Services).
 
-[Ссылка на AWS](https://aws.amazone.com/)
+[Ссылка на AWS](https://aws.amazon.com/)
 
 ![](https://djangoalevel.s3.eu-central-1.amazonaws.com/lesson47/aws.png)
 
@@ -217,7 +217,7 @@ export DBUSER='myuser';
 export DBPASS='mypass';
 ```
 
-Не забываем выполнить эти же строчки в консоли, что бы применить их сейчас же.
+Не забываем выполнить source, что бы применить эти изменения
 
 Для gunicorn проще занести все переменные в отдельный файл, и мы будем использовать его в дальнейшем, создадим еще один файл с этими же переменными.
 

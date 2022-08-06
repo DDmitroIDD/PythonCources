@@ -6,16 +6,20 @@
 
 Что нового в реквесте.
 
+Дока [тут](https://www.django-rest-framework.org/api-guide/requests/)
+
 Два новых парамера `.data` и `.query_string`
 
 `.data` - данные есть запрос POST, PUT или PATCH, аналог `request.POST` или `request.FILES`
 
 `.query_string` - данные если запрос GET, аналог `request.GET`
 
-И параметры `.auth` и `.authenticate` которые мы рассмотрим на следующей лекции, которая целиком про авторизацию и
-пермишены.
+И параметры `.auth` и `.authenticate` которые мы рассмотрим на следующей лекции. Она целиком про авторизацию и
+пермишены (доступы).
 
 ## Response
+
+Дока [тут](https://www.django-rest-framework.org/api-guide/responses/)
 
 В отличие от классической Django, респонсом в рест системе, будет обычный HTTP респонс содержащий набор данных, чаще
 всего JSON (но бывает и нет).
@@ -35,45 +39,22 @@
 
 `headers` и `content_type` - хедеры и контент тайп запроса
 
-## View
+## Настройка для получения JSON
 
-Знакомимся с самым подробным сайтом по ДРФ классам [тут](http://www.cdrf.co/)
-
-Для описания эндпоинтов в ДРФ существует специальный класс `APIView`, по аналогии с классической Django запрос
-обрабатывает метод `.dispatch()` и передаёт дальше в метод совпадающий с названием HTTP метода.
-
-Возвращать любой метод обязан объект `Response`, как работают `authentication_classes` и `permission_classes` я расскажу
-на следующем занятии.
+В современной версии пекеджа DRF, по умолчанию не указан параметр для получения ответа в формате JSON. Это нужно указать
+явно, для этого в `settings.py` необходимо добавить:
 
 ```python
-from rest_framework.views import APIView
-from rest_framework.response import Response
-from rest_framework import authentication, permissions
-from django.contrib.auth.models import User
-
-
-class ListUsers(APIView):
-    """
-    View to list all users in the system.
-
-    * Requires token authentication.
-    * Only admin users are able to access this view.
-    """
-    authentication_classes = [authentication.TokenAuthentication]
-    permission_classes = [permissions.IsAdminUser]
-
-    def get(self, request, format=None):
-        """
-        Return a list of all users.
-        """
-        usernames = [user.username for user in User.objects.all()]
-        return Response(usernames)
+REST_FRAMEWORK = {
+    'DEFAULT_RENDERER_CLASSES': (
+        'rest_framework.renderers.JSONRenderer',
+    )
+}
 ```
 
-По аналогии с обычным View, у джанго рест фреймворка есть два подхода к написанию эндпоинтов, функциональный и Class
-Based.
-
 ## @api_view
+
+Дока [тут](https://www.django-rest-framework.org/api-guide/views/#api_view)
 
 Для описания эндпоинта функционально нужно указать декоратор api_view и методы которые он может принимать. Возвращает
 всё так же объект респонса.
@@ -188,14 +169,19 @@ http --form POST http://127.0.0.1:8000/snippets/ code="print(123)"
 }
 ```
 
+## View
+
+Знакомимся с самым подробным сайтом по ДРФ классам [тут](http://www.cdrf.co/)
+
 ## APIView
+
+Дока [тут](https://www.django-rest-framework.org/api-guide/views/#class-based-views)
 
 Так же мы можем описать это же через Class Base View, для этого нам нужно наследоваться от APIView
 
 ```python
 from snippets.models import Snippet
 from snippets.serializers import SnippetSerializer
-from django.http import Http404
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
@@ -271,37 +257,37 @@ urlpatterns = [
 
 В нём описаны такие поля как:
 
-queryset, хранит кверисет
+- `queryset`, хранит кверисет
 
-serializer_class, хранит сериалайзер
+- `serializer_class`, хранит сериалайзер
 
-lookup_field = 'pk', название атрибута в модели который будет отвечать за PK,
+- `lookup_field = 'pk'`, название атрибута в модели который будет отвечать за PK,
 
-lookup_url_kwarg = None, название атрибута в запросе который будет отвечать за `pk`
+- `lookup_url_kwarg = None`, название атрибута в запросе который будет отвечать за `pk`
 
-filter_backends = api_settings.DEFAULT_FILTER_BACKENDS, - фильтры запросов
+- `filter_backends = api_settings.DEFAULT_FILTER_BACKENDS`, - фильтры запросов
 
-pagination_class = api_settings.DEFAULT_PAGINATION_CLASS, - пагинация запросов
+- `pagination_class = api_settings.DEFAULT_PAGINATION_CLASS`, - пагинация запросов
 
-и методы:
+И методы:
 
-`get_queryset` - получение кверисета,
+- `get_queryset` - получение кверисета,
 
-`get_object` - получение одного объекта,
+- `get_object` - получение одного объекта,
 
-`get_serializer` - получение объекта сериалайзера,
+- `get_serializer` - получение объекта сериалайзера,
 
-`get_serializer_class` - получение класса сериалайзера,
+- `get_serializer_class` - получение класса сериалайзера,
 
-`get_serializer_context` - получить контекст сериалайзера,
+- `get_serializer_context` - получить контекст сериалайзера,
 
-`filter_queryset` - отфильтровать кверисет,
+- `filter_queryset` - отфильтровать кверисет,
 
-`paginator` - объект пагинации,
+- `paginator` - объект пагинации,
 
-`paginate_queryset` - пагинировать кверисет,
+- `paginate_queryset` - пагинировать кверисет,
 
-`get_paginated_response` - получить пагинированый ответ.
+- `get_paginated_response` - получить пагинированый ответ.
 
 *Такой класс не работает самостоятельно, только вместе с определёнными миксинами*
 
@@ -336,7 +322,7 @@ class CreateModelMixin(object):
 
 Это миксин, и без сторонних классов этот функционал работать не будет.
 
-При вызове метода `create` мы предпогалаем, что у нас был реквест.
+При вызове метода `create` мы предполагаем, что у нас был реквест.
 
 Вызываем метод get_serializer() из класса GenericAPIView, для получения объекта сериалайзера, обратите внимание, что
 данные передаются через аттрибут `data` так как, они получены от пользователя. Проверяем данные на валидность (обратите
@@ -439,6 +425,8 @@ class ListModelMixin(object):
 Вот так выглядят классы которые уже можно использовать. Как это работает? Эти классы наследуют логику работы с данными
 из необходимого миксина, общие методы которые актуальны для любого CRUD действия из `GenericAPIView` дальше описываем
 методы тех видов запросов которые мы хотим обрабатывать, в которых просто вызываем необходимый метод из миксина.
+
+**Переписываются методы `create`, `destroy` итд, а не `get`, `post`!**
 
 ```python
 class CreateAPIView(mixins.CreateModelMixin,
@@ -585,7 +573,9 @@ class CommentListView(ListCreateAPIView):
 
 ## ViewSet
 
-Классы которые отвечают за поведение нескольких запросов, которые отличаются друг от друга только методом, называются
+Дока [тут](https://www.django-rest-framework.org/api-guide/viewsets/)
+
+Классы, которые отвечают за поведение нескольких запросов, и отличаются друг от друга только методом, называются
 ViewSet.
 
 Они на самом деле описывают методы, для получения списка действий (list, retrieve, итд), и преобразования их в урлы (об
@@ -629,57 +619,9 @@ user_detail = UserViewSet.as_view({'get': 'retrieve'})
 
 Хоть так никто и не делает, об этом дальше.
 
-## Декоратор action
-
-Что делать если вам нужно дополнительное действие связанное с деталями вашей вью, но не один из крудов не походит? Тут
-можно использовать декоратор @action, что бы описать новое действие в этом же вьюсете
-
-```python
-from django.contrib.auth.models import User
-from rest_framework import status, viewsets
-from rest_framework.decorators import action
-from rest_framework.response import Response
-from myapp.serializers import UserSerializer, PasswordSerializer
-
-
-class UserViewSet(viewsets.ModelViewSet):
-    """
-    A viewset that provides the standard actions
-    """
-    queryset = User.objects.all()
-    serializer_class = UserSerializer
-
-    @action(detail=True, methods=['post'])
-    def set_password(self, request, pk=None):
-        user = self.get_object()
-        serializer = PasswordSerializer(data=request.data)
-        if serializer.is_valid():
-            user.set_password(serializer.data['password'])
-            user.save()
-            return Response({'status': 'password set'})
-        else:
-            return Response(serializer.errors,
-                            status=status.HTTP_400_BAD_REQUEST)
-
-    @action(detail=False)
-    def recent_users(self, request):
-        recent_users = User.objects.all().order_by('-last_login')
-
-        page = self.paginate_queryset(recent_users)
-        if page is not None:
-            serializer = self.get_serializer(page, many=True)
-            return self.get_paginated_response(serializer.data)
-
-        serializer = self.get_serializer(recent_users, many=True)
-        return Response(serializer.data)
-```
-
-Принимает два основных параметра, `detail` - описывает должен ли этот экшен принимать PK (действие над всеми объектами
-или над конкретным), и `methods` - список http методов, на которые должен срабатывать action.
-
-Есть и другие, например классы пермишенов, или имя.
-
 ## ModelViewSet и ReadOnlyModelViewSet
+
+Дока [тут](https://www.django-rest-framework.org/api-guide/viewsets/#modelviewset)
 
 Объединяем всё что мы уже знаем.
 
@@ -738,6 +680,8 @@ class CreateListRetrieveViewSet(mixins.CreateModelMixin,
 
 ### Пагинация
 
+Дока [тут](https://www.django-rest-framework.org/api-guide/pagination/)
+
 Для действия `list` как мы помним используется пагинация. Как это работает?
 
 Если у нас нет необходимости настраивать все вьюсеты отдельно, то мы можем укать такую настройку в `settings.py`
@@ -775,7 +719,61 @@ class BillingRecordsView(generics.ListAPIView):
     pagination_class = LargeResultsSetPagination
 ```
 
+## Декоратор action
+
+Дока [тут](https://www.django-rest-framework.org/api-guide/viewsets/#marking-extra-actions-for-routing)
+
+Что делать если вам нужно дополнительное действие связанное с деталями вашей вью, но ни один из крудов не походит? Тут
+можно использовать декоратор @action, что бы описать новое действие в этом же вьюсете
+
+```python
+from django.contrib.auth.models import User
+from rest_framework import status, viewsets
+from rest_framework.decorators import action
+from rest_framework.response import Response
+from myapp.serializers import UserSerializer, PasswordSerializer
+
+
+class UserViewSet(viewsets.ModelViewSet):
+    """
+    A viewset that provides the standard actions
+    """
+    queryset = User.objects.all()
+    serializer_class = UserSerializer
+
+    @action(detail=True, methods=['post'])
+    def set_password(self, request, pk=None):
+        user = self.get_object()
+        serializer = PasswordSerializer(data=request.data)
+        if serializer.is_valid():
+            user.set_password(serializer.data['password'])
+            user.save()
+            return Response({'status': 'password set'})
+        else:
+            return Response(serializer.errors,
+                            status=status.HTTP_400_BAD_REQUEST)
+
+    @action(detail=False)
+    def recent_users(self, request):
+        recent_users = self.get_queryset().order_by('-last_login')
+
+        page = self.paginate_queryset(recent_users)
+        if page is not None:
+            serializer = self.get_serializer(page, many=True)
+            return self.get_paginated_response(serializer.data)
+
+        serializer = self.get_serializer(recent_users, many=True)
+        return Response(serializer.data)
+```
+
+Принимает два основных параметра, `detail` - описывает должен ли этот экшен принимать PK (действие над всеми объектами
+или над одним конкретным), и `methods` - список http методов, на которые должен срабатывать action.
+
+Есть и другие, например классы пермишенов, или имя.
+
 ## Роутеры
+
+Дока [тут](https://www.django-rest-framework.org/api-guide/routers/)
 
 Роутер, это автоматический генератор урлов для вьюсетов.
 
@@ -793,7 +791,7 @@ urlpatterns = router.urls
 Если у вьюсета нет параметра `queryset`, то нужно указать поле `basename` если нет, то автоматически будет использовано
 имя модели, маленькими буквами.
 
-Урлы будут сгененрированы автоматически и им будут автоматически присвоены имена:
+Урлы будут сгенерированы автоматически и им будут автоматически присвоены имена:
 
 ```
 URL pattern: ^users/$ Name: 'user-list'
@@ -816,14 +814,13 @@ urlpatterns = [
 Допустим есть такой экстра экшен
 
 ```python
-from myapp.permissions import IsAdminOrIsSelf
 from rest_framework.decorators import action
 
 
 class UserViewSet(ModelViewSet):
     ...
 
-    @action(methods=['post'], detail=True, permission_classes=[IsAdminOrIsSelf])
+    @action(methods=['post'], detail=True)
     def set_password(self, request, pk=None):
         ...
 ```
@@ -831,10 +828,22 @@ class UserViewSet(ModelViewSet):
 то роутер автоматически сгенерирует урл `^users/{pk}/set_password/$` и имя `user-set-password`
 
 Класс `SimpleRouter` может принимать параметр `trailing_slash=False` True или False, по дефолту тру, поэтому все апи,
-должны принимать урлы заканчивающиеся на слеш, если указать явно, то будет принимать всё без слеша.
+должны принимать урлы заканчивающиеся на `/`, если указать явно, то будет принимать всё без `/`.
 
-## Задание
+## Практика/домашка
 
-1. Создать модел вью сеты, для моделей у которых нет форейн кея к пользователю. Проверить все постманом
+Создать две модели. Книга и Автор связанные через ForeignKey, у автора есть имя и возраст. У книги есть название.
 
-2. Для вьюсета юзера написать экшен для смены пароля.
+1) Полный круд для двух объектов, книга и автор, должны работать все виды запросов через постман
+
+2) При создании книги добавлять в конце названия символ "!"
+
+3) Для метода GET книги, добавить опциональный параметр author_age, если он указан, и там число, то отображать только
+   книги, если возраст автора больше или равен указанного.
+
+4) Для метода GET автора, добавить опциональный параметр book_name, для фильтрации авторов у которых есть книги, у
+   которых название частично совпадают с указанным параметром. (Например, если у автора есть только одна книга "Азбука",
+   то по запросу "бук" этот автор должен быть в списке, по запросу "ква", нет)
+
+5) Добавить отдельный экшен, что бы получать объект автора с полем books, в котором будут лежать id всех книг этого
+   автора
