@@ -1,736 +1,878 @@
-# Урок 37. Что такое API. REST и RESTful. Django REST Framework.
+# Лекция 37. Deployment
 
-![](https://www.meme-arsenal.com/memes/6200d14d795eab11d26a3afabed68439.jpg)
+![](https://res.cloudinary.com/practicaldev/image/fetch/s--q_bdVQkA--/c_limit%2Cf_auto%2Cfl_progressive%2Cq_auto%2Cw_880/https://dev-to-uploads.s3.amazonaws.com/i/9am30hkx4lfoxubt48sv.png)
 
-## Что же такое API?
+## Static и Media файлы
 
-Итак, начнём с определения. API (Application Programming Interface) — это интерфейс программирования, интерфейс создания
-приложений.
+**Static файлы** - файлы, которые не являются частью обязательных файлов для работы системы ( `*.py`, `*.html`), но
+необходимы для изменения отображения (`*.css`, `*.js`, `*.jpg`). К таким файлам есть доступ из кода, и обычно они не
+могут быть изменены с пользовательской стороны (шрифты на сайте, css стили, картинка на фоне и т.д.)
 
-В нашем конкретном случае, под API практически всегда будет подразумеваться REST API о котором дальше, но для нас это
-эндпоинт (урл, на который можно отправить запрос) который выполняет какие-либо действия, или возвращает нам какую либо
-информацию.
+**Media файлы** - файлы, загруженные пользователями (вне зависимости от привилегий), например, аватарки, картинки 
+товаров, голосовые сообщения :) К таким файлам в репозитории нет и не должно быть доступа.
 
-## Что такое REST?
+### Где их хранить?
 
-![](https://i1.wp.com/www.ybouglouan.pl/wp-content/uploads/2017/04/rest_api_sortof.jpg)
+Static файлы практически всегда разбросаны по приложениям проекта, что очень удобно при разработке, но при 
+использовании их гораздо проще хранить в одном месте, и тоже вне проекта.
 
-REST (Representational State Transfer — «передача состояния представления») - по сути, это архитектурный стиль
-(рекомендации к разработке), но это в теории, практику рассмотрим дальше.
+Media файлы нужно хранить отдельно от статики, иначе можно получить большое количество проблем.
 
-![](https://automated-testing.info/uploads/default/original/2X/e/eaf77634076d45e18c501abf936a9a8ad1913bb4.png)
+Проще всего создать две отдельные папки `static` и `media` или одну папку `files`, а в ней уже вложенные папки `static`
+и `media`.
 
-### Свойства REST архитектуры.
+### Как это настраивается в Django?
 
-Свойства архитектуры, которые зависят от ограничений, наложенных на REST-системы:
-
-1. **Client-Server**. Система должна быть разделена на клиентов, и на сервер(ы). Разделение интерфейсов означает, что,
-   например, клиенты не связаны с хранением данных, которое остается внутри каждого сервера, так что мобильность кода
-   клиента улучшается. Серверы не связаны с интерфейсом пользователя или состоянием, так что серверы могут быть проще и
-   масштабируемы. Серверы и клиенты могут быть заменяемы и разрабатываться независимо, пока интерфейс не изменяется.
-
-2. **Stateless**. Сервер не должен хранить какой-либо информации о клиентах. В запросе должна храниться вся необходимая
-   информация для обработки запроса и если необходимо, идентификации клиента.
-
-3. **Cache**․ Каждый ответ должен быть отмечен является ли он кэшируемым или нет, для предотвращения повторного
-   использования клиентами устаревших или некорректных данных в ответ на дальнейшие запросы.
-
-4. **Uniform Interface**. Единый интерфейс определяет интерфейс между клиентами и серверами. Это упрощает и отделяет
-   архитектуру, которая позволяет каждой части развиваться самостоятельно.
-
-   Четыре принципа единого интерфейса:
-
-   4.1) **Identification of resources (основан на ресурсах)**. В REST ресурсом является все то, чему можно дать имя.
-   Например, пользователь, изображение, предмет (майка, голодная собака, текущая погода) и т.д. Каждый ресурс в REST
-   должен быть идентифицирован посредством стабильного идентификатора, который не меняется при изменении состояния
-   ресурса. Идентификатором в REST является URI.
-
-   4.2) **Manipulation of resources through representations. (Манипуляции над ресурсами через представления)**.
-   Представление в REST используется для выполнения действий над ресурсами. Представление ресурса представляет собой
-   текущее или желаемое состояние ресурса. Например, если ресурсом является пользователь, то представлением может
-   являться XML или HTML описание этого пользователя.
-
-   4.3) **Self-descriptive messages (само-документируемые сообщения)**. Под само-описательностью имеется ввиду, что
-   запрос и ответ должны хранить в себе всю необходимую информацию для их обработки. Не должны быть дополнительные
-   сообщения или кэши для обработки одного запроса. Другими словами отсутствие состояния, сохраняемого между запросами к
-   ресурсам. Это очень важно для масштабирования системы.
-
-   4.4) **HATEOAS (hypermedia as the engine of application state)**. Статус ресурса передается через содержимое body,
-   параметры строки запроса, заголовки запросов и запрашиваемый URI (имя ресурса). Это называется гипермедиа (или
-   гиперссылки с гипертекстом). HATEOAS также означает, что, в случае необходимости ссылки могут содержаться в теле
-   ответа (или заголовках) для поддержки URI, извлечения самого объекта или запрошенных объектов.
-
-5. Layered System. В REST допускается разделить систему на иерархию слоев, но с условием, что каждый компонент может
-   видеть компоненты только непосредственно следующего слоя. Например, если вы вызываете службу PayPal, а он в свою
-   очередь вызывает службу Visa, вы о вызове службы Visa ничего не должны знать.
-
-6. Code-On-Demand (опционально). В REST позволяется загрузка и выполнение кода или программы на стороне клиента.
-
-Если выполнены первые 4 пункта и не нарушены 5 и 6, такое приложение называется **RESTful**
-
-**Важно!** Сама архитектура REST не привязана к конкретным технологиям и протоколам, но в реалиях современного Веб,
-построение RESTful API почти всегда подразумевает использование HTTP и каких-либо распространенных форматов
-представления ресурсов, например JSON, или, менее популярного сегодня, XML.
-
-### Идемпотентность
-
-![](http://risovach.ru/upload/2015/12/mem/kot-bezyshodnost_100253424_orig_.jpg)
-
-С точки зрения RESTful-сервиса, операция (или вызов сервиса) идемпотентна тогда, когда клиенты могут делать один и тот
-же вызов неоднократно при одном и том же результате на сервере. Другими словами, создание большого количества идентичных
-запросов имеет такой же эффект, как и один запрос. Заметьте, что в то время, как идемпотентные операции производят один
-и тот же результат на сервере, ответ сам по себе может не быть тем же самым (например, состояние ресурса может
-измениться между запросами).
-
-Методы PUT и DELETE по определению идемпотентны. Тем не менее есть один нюанс с методом DELETE. Проблема в том, что
-успешный DELETE-запрос возвращает статус 200 (OK) или 204 (No Content), но для последующих запросов будет все время
-возвращать 404 (Not Found), Состояние на сервере после каждого вызова DELETE то же самое, но ответы разные.
-
-Методы GET, HEAD, OPTIONS и TRACE определены как безопасные. Это означает, что они предназначены только для получения
-информации и не должны изменять состояние сервера. Они не должны иметь побочных эффектов, за исключением безобидных
-эффектов, таких как: логирование, кеширование, показ баннерной рекламы или увеличение веб-счетчика.
-
-По определению, безопасные операции идемпотентны, так как они приводят к одному и тому же результату на сервере.
-Безопасные методы реализованы как операции только для чтения. Однако безопасность не означает, что сервер должен
-возвращать тот же самый результат каждый раз.
-
-### Коды состояний HTTP (основные)
-
-![](http://img1.reactor.cc/pics/post/http-status-code-it-http-%D0%BA%D0%BE%D1%82%D1%8D-4397611.jpeg)
-
-1xx: Information
-
-100: Continue
-
-2xx: Success
-
-200: OK
-
-201: Created
-
-202: Accepted
-
-204: No Content
-
-3xx: Redirect
-
-301: Moved Permanently
-
-307: Temporary Redirect
-
-4xx: Client Error
-
-400: Bad Request
-
-401: Unauthorized
-
-403: Forbidden
-
-404: Not Found
-
-5xx: Server Error
-
-500: Internal Server Error
-
-501: Not Implemented
-
-502: Bad Gateway
-
-503: Service Unavailable
-
-504: Gateway Timeout
-
-### Postman
-
-На практике обычно бекенд разработчики вообще не имеют отношения к тому что происходит на фронте (Если ты не фулстек:).
-А только подготавливают для фронта апи для различных действий, чаще всего CRUD.
-
-Для проверки работоспособности API чаще всего используется **postman** скачать можно [ТУТ](https://www.getpostman.com/)
-
-Это программа, которая позволяет создавать запросы любой сложности к серверу. Рекомендую разобраться как этим
-пользоваться подробно.
-
-### Общая информация.
-
-Хоть REST не является протоколом, но в современном вебе это почти всегда HTTP и JSON.
-
-### JSON
-
-JSON (JavaScript Object Notation) - Текстовый формат обмена данными, легко читается, очень похож на словарь в python.
-
-## Как это работает на практике и при чём тут Django
-
-Для Django существует несколько различных пакетов для применения REST архитектуры, но основным является **Django REST
-Framework** дока [тут](https://www.django-rest-framework.org/)
-
-### Установка
-
-```pip install djangorestframework```
-
-Не забываем добавить в INSTALLED_APPS **'rest_framework'**
-
-## Сериалайзеры
-
-Сериалайзер в DRF - это класс для преобразования данных в требуемый формат (Обычно JSON).
-
-Допустим у нас есть такая модель:
+В рамках Django при создании проекта в начальной версии `setting.py` в `INSTALLED_APPS` автоматически
+добавляется `django.contrib.staticfiles`, именно это приложение отвечает за то, как будут обрабатываться статические
+файлы.
 
 ```python
-from django.db import models
-from pygments.lexers import get_all_lexers
-from pygments.styles import get_all_styles
-
-LEXERS = [item for item in get_all_lexers() if item[1]]
-LANGUAGE_CHOICES = sorted([(item[1][0], item[0]) for item in LEXERS])
-STYLE_CHOICES = sorted([(item, item) for item in get_all_styles()])
-
-
-class Snippet(models.Model):
-    created = models.DateTimeField(auto_now_add=True)
-    title = models.CharField(max_length=100, blank=True, default='')
-    code = models.TextField()
-    linenos = models.BooleanField(default=False)
-    language = models.CharField(choices=LANGUAGE_CHOICES, default='python', max_length=100)
-    style = models.CharField(choices=STYLE_CHOICES, default='friendly', max_length=100)
-
-    class Meta:
-        ordering = ['created']
+# settings.py
+STATIC_URL = '/static/'
 ```
 
-То мы можем описать сериалайзер так:
+Указанный параметр `STATIC_URL` будет преобразован в URL, по которому можно получить статические файлы.
+
+Например, `"/static/"` или `"http://static.example.com/"`
+
+В первом случае при запросе к статике будет выполнен запрос на текущий URL с приставкой `http://127.0.0.1:8000/static/`
+
+Во втором запросы будут произведены на отдельный URL.
+
+### Где такой урл будет сгенерирован?
+
+В шаблоне, где мы можем использовать template tag `static`:
+
+```html
+{% load static %}
+<img src="{% static 'my_app/example.jpg' %}" alt="My image">
+```
+
+### Переменная DEBUG
+
+В `settings.py` есть переменная `DEBUG`, по дефолту она равна `True`, но за что она отвечает?
+
+В основном она отвечает за то, как вести себя при ошибках (чаще всего 500-х). Если вы делаете неправильный запрос (не
+туда, не те данные и т.д.), то вы видите подробное описание того, почему ваш запрос не удался, на какой строчке кода 
+упал, или нет такого URL, но вот такие есть. Всё это отображается только потому, что переменная ```DEBUG=True```. 
+Запущенный сайт никогда не покажет вам эту информацию.
+
+### Переменная DEBUG и runserver
+
+На самом деле, если у вас ```DEBUG=True``` и вы запускаете команду `runserver`, то запускается еще
+и `django.contrib.staticfiles.views.serve()`, который позволяет отображать статические файлы в процессе разработки. При 
+загрузке проекта в реальное использование переменную `DEBUG` нужно установить в `False` и обрабатывать статические 
+файлы внешними средствами, поговорим о них ниже.
+
+### STATICFILES_DIRS
+
+Список папок, в которых хранится ваша статика для разработки, чаще всего это папки `static` в разных приложениях,
+например, `authenticate/static`, `billing/static` и т.д.
+
+**НЕ ДОЛЖЕН СОДЕРЖАТЬ ЗНАЧЕНИЕ ИЗ ПЕРЕМЕННОЙ `STATIC_ROOT`!!!!**
+
+### STATIC_ROOT
+
+Переменная, содержащая путь к папке, в которую всю найденную статику из папок в переменной `STATICFILES_DIRS`
+соберёт команда `python manage.py collectstatic`.
+
+Как это работает на практике? При разработке используются статические файлы из папок разных приложений, а для
+продакшена настраивается скрипт, который при любом изменении будет запускать команду `collectstatic`, которая будет
+собирать всю статику в то место, которое уже обрабатывается сторонними сервисами, о которых ниже.
+
+### MEDIA_URL
+
+По аналогии со статикой такая же настройка для медиа.
+
+### MEDIA_ROOT
+
+Абсолютный путь к папке, в которой мы будем хранить пользовательские файлы.
+
+Медиа собирать не нужно, так как мы не можем её менять, это только пользовательская привилегия.
+
+## Deployment
+
+Что такое деплой? Это развертывание вашего проекта для использования его из интернета, а не локально.
+
+[/не отображается/]: # (![]&#40;https://pics.me.me/when-people-ask-how-the-deployment-is-going-im-fine-52721062.png&#41;)
+
+Что для этого необходимо? Нужен сервер (на самом деле, им может быть любое устройство: комп, телефон и т.д.), но у 
+сервера есть одна особенность, ему нужно работать всегда, мы же не хотим, чтобы наш сайт или приложение переставало 
+работать.
+
+Чтобы организовать 100% uptime, чаще всего используются облачные сервера, многие компании готовы предоставить такие
+сервера на платной основе. Мой личный опыт говорит о том, что самые надёжные и самые часто используемые - это
+сервера компании Amazon, также у Amazon очень большая инфраструктура и экосистема для обслуживания сервером, но об
+этом в следующий раз.
+
+## Amazon EC2
+
+Сервис, который предоставляет нам выделенные мощности, называется **EC2**.
+
+Для начала нам необходим аккаунт на платформе AWS (Amazon Web Services).
+
+[Ссылка на AWS](https://aws.amazon.com/)
+
+![](https://djangoalevel.s3.eu-central-1.amazonaws.com/lesson47/aws.png)
+
+У Amazon существуют сотни различных сервисов для различных задач, но на данном этапе нас интересует только EC2.
+
+**EC2** - это сервис, который позволяет запускать виртуальные сервера с различной мощностью на различных операционных
+системах.
+
+Для нашего случая мы будем рассматривать самый слабый по характеристикам сервер (t2.nano) на базе Linux (Ubuntu Server
+18.04 LTS).
+
+![](https://djangoalevel.s3.eu-central-1.amazonaws.com/lesson47/ec2-ubuntu.png)
+
+На следующей вкладке выбираем мощность сервера и пару ключей для подключения по SSH.
+
+## Общая теория по деплою Django
+
+Для деплоя Django приложения используется два различных сервера, первый - для запуска приложения локально на сервере,
+второй - как прокси, чтобы выход в интернет связать с этим локально запущенным сервером и предоставить доступ
+к статике и медиа. За обработку данных будет отвечать первый сервер, за безопасность и распределение нагрузок - второй.
+
+Первый сервер - это WSGI (*Web-Server Gateway Interface*), работает примерно так:
+
+![](http://lectures.uralbash.ru/_images/server-app.png)
+
+В качестве WSGI сервера может быть использовано достаточно большое количество разных серверов:
+
+- uWSGI
+- Bjoern
+- uWSGI
+- mod_wsgi
+- Meinheld
+- Gunicorn
+
+И так далее, это далеко не полный список. В качестве примера мы будем использовать Gunicorn (на моей практике самый
+используемый сервер).
+
+Также существует технология ASGI (*Asynchronous Standard Gateway Interface*) - это улучшение технологии WSGI, основные 
+серверы для ASGI:
+
+- Daphne
+- Hypercorn
+- Uvicorn
+
+Тоже часто используемые технологии, и скорее всего дальше будут использоваться всё чаще.
+
+В качестве прокси сервера могут быть использованы:
+
+- Nginx
+- Apache
+
+### runserver
+
+Может возникнуть идея, а почему бы не использовать команду `runserver`? Зачем нам вообще какие-то дополнительные 
+сервера? Команда `runserver` не предполагает даже относительно серьезных нагрузок, даже при условных 100 пользователях 
+базовая команда будет захлёбываться.
+
+## Пример развёртывания
+
+Рассмотрим, как развернуть наш проект на примере EC2 (Ubuntu 18.04) + Gunicorn + Nginx
+
+Для начала необходимо зайти на наш EC2 сервер при помощи SSH.
+
+Если вы используете Windows, то самый простой способ использовать SSH - это либо клиент putty, либо установить Git CLI,
+git интерфейс поддерживает команду `ssh`.
+
+Свежесозданный инстанс не содержит вообще ничего, даже интерпретатора Python, а значит, нам необходимо его установить, 
+но вместе с ним установим и другие нужные пакеты (БД, сервера и т.д.).
+
+```
+sudo apt update
+sudo apt install python3-pip python3-dev python3-venv libpq-dev postgresql postgresql-contrib nginx curl
+```
+
+### База данных
+
+Как создать базу данных и пользователя с доступом к ней, вы уже знаете, заходим в консоль postgresql и делаем это:
+
+```sudo -u postgres psql```
+```
+User: myuser
+DB: mydb
+password: mypass
+```
+
+## Переменные операционной системы
+
+Чтобы вносить некоторые параметры в код, используются переменные операционной системы, допустим, в файле `settings.py` 
+мы можем хранить пароль от базы данных, ключи от сервисов и много другой информации, которую нельзя разглашать, но в 
+случае, если вы оставите эти данные в коде, они попадут на git, этого допускать нельзя.
+
+Для использования переменных в ОС Linux используется команда `export var_name="value"`
+
+Если просто в консоль внести команду экспорта, она обнулится после перезагрузки инстанса, нас это не устраивает, 
+поэтому экспорт переменных нужно вносить в файл, загружаемый при каждом запуске, например, `~/.bashrc`, открываем 
+`sudo nano ~/.bashrc` и в самом конце дописываем:
+
+```
+export PROD='True';
+export DBNAME='mydb';
+export DBUSER='myuser';
+export DBPASS='mypass';
+```
+
+Не забываем выполнить source, чтобы применить эти изменения.
+
+Для gunicorn проще занести все переменные в отдельный файл, и мы будем использовать его в дальнейшем, создадим еще один 
+файл с этими же переменными.
+
+```sudo nano /home/ubuntu/.env```
+
+```
+PROD='True'
+DBNAME='mydb'
+DBUSER='myuser'
+DBPASS='mypass'
+```
+
+### Правки в `settings.py`
+
+Один из удобных способов разделить настройки на локальные и продакшен - это всё те же переменные операционной системы,
+например, добавить в проект на уровне файла `settings.py` еще два файла `settings_prod.py` и `settings_local.py`, в
+основной файл нужно импортировать модуль `os` и в конце дописать:
 
 ```python
-from rest_framework import serializers
-from snippets.models import Snippet, LANGUAGE_CHOICES, STYLE_CHOICES
-
-
-class SnippetSerializer(serializers.Serializer):
-    id = serializers.IntegerField(read_only=True)
-    title = serializers.CharField(required=False, allow_blank=True, max_length=100)
-    code = serializers.CharField(style={'base_template': 'textarea.html'})
-    linenos = serializers.BooleanField(required=False)
-    language = serializers.ChoiceField(choices=LANGUAGE_CHOICES, default='python')
-    style = serializers.ChoiceField(choices=STYLE_CHOICES, default='friendly')
-
-    def create(self, validated_data):
-        """
-        Create and return a new `Snippet` instance, given the validated data.
-        """
-        return Snippet.objects.create(**validated_data)
-
-    def update(self, instance, validated_data):
-        """
-        Update and return an existing `Snippet` instance, given the validated data.
-        """
-        instance.title = validated_data.get('title', instance.title)
-        instance.code = validated_data.get('code', instance.code)
-        instance.linenos = validated_data.get('linenos', instance.linenos)
-        instance.language = validated_data.get('language', instance.language)
-        instance.style = validated_data.get('style', instance.style)
-        instance.save()
-        return instance
+if os.environ.get('PROD'):
+    try:
+        from .settings_prod import *
+    except ImportError:
+        pass
+else:
+    try:
+        from .settings_local import *
+    except ImportError:
+        pass
 ```
 
-Как мы можем этим пользоваться, в shell:
+Таким образом мы сможем разделить настройки в зависимости от того, есть ли в операционной системе переменная `PROD`.
+
+В `settings_prod.py` укажем:
 
 ```python
-from snippets.models import Snippet
-from snippets.serializers import SnippetSerializer
-
-snippet = Snippet(code='foo = "bar"\n')
-snippet.save()
-
-snippet = Snippet(code='print("hello, world")\n')
-snippet.save()
-
-serializer = SnippetSerializer(snippet)
-serializer.data
-# {'id': 2, 'title': '', 'code': 'print("hello, world")\n', 'linenos': False, 'language': 'python', 'style': 'friendly'}
-```
-
-Преобразование
-
-```python
-import json
-
-string = json.dumps(serializer.data)  # Преобразовать JSON в строку
-# {'id': 2, 'title': '', 'code': 'print("hello, world")\n', 'linenos': False, 'language': 'python', 'style': 'friendly'}
-json.loads(string)  # # Преобразовать cтроку в JSON
-# {'id': 2, 'title': '', 'code': 'print("hello, world")\n', 'linenos': False, 'language': 'python', 'style': 'friendly'}
-```
-
-## Поля и их особенности
-
-Дока [тут](https://www.django-rest-framework.org/api-guide/fields/)
-
-Любое из полей может иметь такие аргументы:
-
-`read_only` - Поле только для чтения, используется для полей которые не планируются к заполнению (например время
-создания комментария), но планируются к чтению (например отобразить когда был написан комментарий). Такие поля не
-принимаются при создании или изменении. По дефолту False
-
-`write_only` - Ровно наоборот, поля не планируемые для отображения, но необходимые для записи (Пароль, номер карточки,
-итд.). По дефолту False
-
-`required` - Обязательность поля, поле которое можно не указывать при создании\изменении, но его же может и не быть при
-чтении, допустим отчества. По дефолту True
-
-`default` - Значение по умолчанию, если не указано ничего другого. Не поддерживается при частичном обновлении,
-
-`allow_null` - Позволить значению поля быть None. По дефолту False.
-
-`source` - Поле значение которого необходимо получить в модели, допустим при помощи какого-то метода (вычисление полного
-адреса из его частей при помощи метода модели и декоратора property, `CharField(source='get_full_address')`), или из
-какого-то вложенного объекта (Foreign Key на юзера, но необходим только его имейл, а не целый
-объект, `EmailField(source='user.email')`). Имеет спец значение `*` обозначает что источник данных будет передан позже,
-тогда его нужно будет указать в необходимых методах. По дефолту, это имя поля.
-
-`validators` - Список валидаторов, о нём поговорим ниже
-
-`error_messages` - Словарь с кодом ошибок.
-
-Есть и другие, но это наиболее используемые.
-
-У разных полей могут быть свои атрибуты, такие как максимальная длинна, или кол-знаков после запятой.
-
-Виды полей, по аналогии с моделями и формами, могут быть практически какими угодно, за деталями в доку.
-
-### Специфичные поля
-
-ListField - поле для передачи списка.
-Сигнатура `ListField(child=<A_FIELD_INSTANCE>, allow_empty=True, min_length=None, max_length=None)`
-
-```python
-scores = serializers.ListField(
-    child=serializers.IntegerField(min_value=0, max_value=100)
-)
-```
-
-DictField - Поле для передачи словаря. Сигнатура `DictField(child=<A_FIELD_INSTANCE>, allow_empty=True)`
-
-```python
-document = DictField(child=CharField())
-```
-
-HiddenField - Скрытое поле, может быть нужно для валидаций.
-
-```python
-modified = serializers.HiddenField(default=timezone.now)
-```
-
-SerializerMethodField - Поле основанное на методе
-
-Сигнатура `SerializerMethodField(method_name=None)`, `method_name` - название метода, по дефолту `get_<field_name>`
-
-```python
-from django.contrib.auth.models import User
-from django.utils.timezone import now
-from rest_framework import serializers
-
-
-class UserSerializer(serializers.ModelSerializer):
-    days_since_joined = serializers.SerializerMethodField()
-
-    class Meta:
-        model = User
-
-    def get_days_since_joined(self, obj):
-        return (now() - obj.date_joined).days
-```
-
-## Валидация
-
-```python
-serializer.is_valid()
-serializer.validated_data
-# OrderedDict([('title', ''), ('code', 'print("hello, world")\n'), ('linenos', False), ('language', 'python'), ('style', 'friendly')])
-serializer.save()
-# <Snippet: Snippet object>
-# True
-```
-
-По аналогии с формами, мы можем добавить валидацию каждого отдельного поля, при помощи метода `validate_<field_name>`
-
-```python
-from rest_framework import serializers
-
-
-class BlogPostSerializer(serializers.Serializer):
-    title = serializers.CharField(max_length=100)
-    content = serializers.CharField()
-
-    def validate_title(self, value):
-        """
-        Check that the blog post is about Django.
-        """
-        if 'django' not in value.lower():
-            raise serializers.ValidationError("Blog post is not about Django")
-        return value
-```
-
-Возвращает значение, или рейзит ошибку валидации.
-
-Так же валидация может быть осуществлена на уровне объекта. Метод `validate`.
-
-```python
-from rest_framework import serializers
-
-
-class EventSerializer(serializers.Serializer):
-    description = serializers.CharField(max_length=100)
-    start = serializers.DateTimeField()
-    finish = serializers.DateTimeField()
-
-    def validate(self, data):
-        """
-        Check that start is before finish.
-        """
-        if data['start'] > data['finish']:
-            raise serializers.ValidationError("finish must occur after start")
-        return data
-```
-
-Так же можно прописать валидаторы как отдельные функции:
-
-```python
-def multiple_of_ten(value):
-    if value % 10 != 0:
-        raise serializers.ValidationError('Not a multiple of ten')
-
-
-class GameRecord(serializers.Serializer):
-    score = IntegerField(validators=[multiple_of_ten])
-    ...
-```
-
-Или указать в Meta, используя уже существующие валидаторы:
-
-```python
-class EventSerializer(serializers.Serializer):
-    name = serializers.CharField()
-    room_number = serializers.IntegerField(choices=[101, 102, 103, 201])
-    date = serializers.DateField()
-
-    class Meta:
-        # Each room only has one event per day.
-        validators = [
-            UniqueTogetherValidator(
-                queryset=Event.objects.all(),
-                fields=['room_number', 'date']
-            )
-        ]
-```
-
-Так же мы можем передать в сериалайзер список или кверисет из объектов указав при этом атрибут `many=True`
-
-```python
-serializer = SnippetSerializer(Snippet.objects.all(), many=True)
-serializer.data
-# [OrderedDict([('id', 1), ('title', ''), ('code', 'foo = "bar"\n'), ('linenos', False), ('language', 'python'), ('style', 'friendly')]), OrderedDict([('id', 2), ('title', ''), ('code', 'print("hello, world")\n'), ('linenos', False), ('language', 'python'), ('style', 'friendly')]), OrderedDict([('id', 3), ('title', ''), ('code', 'print("hello, world")'), ('linenos', False), ('language', 'python'), ('style', 'friendly')])]
-```
-
-По аналогии с Формами и МоделФормами, у сериалайзеров существуют МоделСериалайзеры
-
-```python
-class SnippetSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = Snippet
-        fields = ['id', 'title', 'code', 'linenos', 'language', 'style']
-```
-
-Если создать сериалайзер в таком виде, то:
-
-```python
-from snippets.serializers import SnippetSerializer
-
-serializer = SnippetSerializer()
-print(repr(serializer))
-# SnippetSerializer():
-#    id = IntegerField(label='ID', read_only=True)
-#    title = CharField(allow_blank=True, max_length=100, required=False)
-#    code = CharField(style={'base_template': 'textarea.html'})
-#    linenos = BooleanField(required=False)
-#    language = ChoiceField(choices=[('Clipper', 'FoxPro'), ('Cucumber', 'Gherkin'), ('RobotFramework', 'RobotFramework'), ('abap', 'ABAP'), ('ada', 'Ada')...
-#    style = ChoiceField(choices=[('autumn', 'autumn'), ('borland', 'borland'), ('bw', 'bw'), ('colorful', 'colorful')...
-```
-
-Чаще всего вы будете пользоваться именно сериалайзерами моделей.
-
-### Вложенные сериалайзеры:
-
-Сериалайзер, может полем другого сериалайзера, такие сериалайзеры, называются вложенными.
-
-```python
-class UserSerializer(serializers.Serializer):
-    email = serializers.EmailField()
-    username = serializers.CharField(max_length=100)
-
-
-class CommentSerializer(serializers.Serializer):
-    user = UserSerializer()
-    content = serializers.CharField(max_length=200)
-    created = serializers.DateTimeField()
-```
-
-Совмещаем с предыдущими знаниями, и получаем вложенное поле с атрибутом many=True, а значит что оно принимает список или
-кверисет таких объектов:
-
-```python
-class CommentSerializer(serializers.Serializer):
-    user = UserSerializer(required=False)
-    edits = EditItemSerializer(many=True)  # A nested list of 'edit' items.
-    content = serializers.CharField(max_length=200)
-    created = serializers.DateTimeField()
-```
-
-### Передача данных в разные стороны:
-
-Обратите внимание, что когда мы обрабатываем данные полученные от пользователя(например запрос), то мы передаём данные в
-сериалайзер через атрибут, `data=`, и после этого обязаны провалидировать данные, так как там могут быть ошибки:
-
-```python
-serializer = CommentSerializer(data={'user': {'email': 'foobar', 'username': 'doe'}, 'content': 'baz'})
-serializer.is_valid()
-# False
-serializer.errors
-# {'user': {'email': ['Enter a valid e-mail address.']}, 'created': ['This field is required.']}
-```
-
-Если ошибок нет, то данные будут находиться в атрибуте `validated_data`
-
-Но если мы сериализуем данные которые мы взяли из базы то у нас нет необходимости их валидировать. Мы передаём их без
-каких либо аттрибутов, данные будут находиться в аттрибуте `data`:
-
-```python
-comment = Comment.objects.first()
-serializer = CommentSerializer(comment)
-serializer.data
-```
-
-### Метод save
-
-У моделсериалайзеров, по аналогии с моделформами есть метод `save()`, но в отличие от моделформ, дополнительные данные
-можно передать прямо в атрибуты метода `save`.
-
-```python
-e = EventSerializer(data={'start': "05/05/2021", 'finish': "06/05/2021"})
-e.save(description='bla-bla')
-```
-
-## Связи в сериалайзерах
-
-Все мы знаем, что бывают связи в базе данных. Данные нужно каким то образом получать, но в случае сериализации нам,
-часто нет необходимости получать весь объект, а нужны, допустим, только id, или название. DRF это предусмотрел.
-
-Предположим у нас есть вот такие модели:
-
-```python
-class Album(models.Model):
-    album_name = models.CharField(max_length=100)
-    artist = models.CharField(max_length=100)
-
-
-class Track(models.Model):
-    album = models.ForeignKey(Album, related_name='tracks', on_delete=models.CASCADE)
-    order = models.IntegerField()
-    title = models.CharField(max_length=100)
-    duration = models.IntegerField()
-
-    class Meta:
-        unique_together = ['album', 'order']
-        ordering = ['order']
-
-    def __str__(self):
-        return '%d: %s' % (self.order, self.title)
-```
-
-Что бы получить в сериалайзере альбома все его треки, мы можем сделать, например, так:
-
-```python
-class TrackSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = Track
-        fields = ['title', 'duration']
-
-
-class AlbumSerializer(serializers.ModelSerializer):
-    tracks = TrackSerializer(many=True)
-
-    class Meta:
-        model = Album
-        fields = ['album_name', 'artist', 'tracks']
-```
-
-Но, есть и другие варианты получение данных.
-
-### StringRelatedField
-
-```python
-class AlbumSerializer(serializers.ModelSerializer):
-    tracks = serializers.StringRelatedField(many=True)
-
-    class Meta:
-        model = Album
-        fields = ['album_name', 'artist', 'tracks']
-```
-
-Вернёт значение меджик метода __str__ для каждого объекта:
-
-```json
-{
-  "album_name": "Things We Lost In The Fire",
-  "artist": "Low",
-  "tracks": [
-    "1: Sunflower",
-    "2: Whitetail",
-    "3: Dinosaur Act"
-  ]
+import os
+
+DEBUG = False
+ALLOWED_HOSTS = ['54.186.155.252']
+
+DATABASES = {
+    'default': {
+        'ENGINE': 'django.db.backends.postgresql',
+        'NAME': os.environ.get('DBNAME'),
+        'USER': os.environ.get('DBUSER'),
+        'PASSWORD': os.environ.get('DBPASS'),
+        'HOST': os.environ.get('DBHOST', '127.0.0.1'),
+        'PORT': os.environ.get('DBPORT', '5432'),
+    }
 }
 ```
 
-### PrimaryKeyRelatedField
+Параметр `DEBUG = False` , так как нам не нужно отображать подробности ошибок.
 
-```python
-class AlbumSerializer(serializers.ModelSerializer):
-    tracks = serializers.PrimaryKeyRelatedField(many=True, read_only=True)
+В `ALLOWED_HOSTS` нужно указывать URL и/или IP, по которому будет доступно приложение. Как указать там URL, мы поговорим
+на следующем занятии, а пока можно указать там IP, который мы получили у Amazon после создания инстанса:
 
-    class Meta:
-        model = Album
-        fields = ['album_name', 'artist', 'tracks']
+![](https://djangoalevel.s3.eu-central-1.amazonaws.com/lesson47/ec2-ip.png)
+
+## git clone и виртуальное окружение
+
+Клонируем код нашего проекта:
+
+```git clone https://github.com/your-git/your-repo.git```
+
+Создаём виртуальное окружение, я обычно создаю отдельную папку в рабочей папке:
+
+```
+cd ~/
+mkdir venv
+python3 -m venv venv/
 ```
 
-Вернёт id:
+И активируем его:
 
-```json
-{
-  "album_name": "Undun",
-  "artist": "The Roots",
-  "tracks": [
-    89,
-    90,
-    91
-  ]
+```source ~/venv/bin/activate```
+
+Переходим в раздел с проектом и устанавливаем всё, что есть в `requirements.txt`:
+
+```
+cd ~/proj_name
+pip install -r requirements.txt
+```
+
+Если локально вы не работали с базой postgresql, то необходимо доставить модуль для работы с ним:
+
+```pip install psycopg2-binary```
+
+После чего вы должны успешно применить миграции:
+
+```python manage.py migrate```
+
+## Проверяем работоспособность сервера
+
+Для проверки того, что ваше приложение можно разворачивать, запустим его через стандартную команду:
+
+```python manage.py runserver```
+
+Чтобы это сработало, необходимо разрешить использовать порт, который мы будем использовать для теста, по стандарту это 
+порт номер 8000:
+
+```sudo ufw allow 8000```
+
+Мы открыли порт со стороны сервера, но пока что он закрыт со стороны Amazon, давайте временно откроем его тоже. Для
+этого идём на страницу Amazon с описанием инстанса, открываем вкладку `Security` и кликаем на название секьюрити группы:
+
+![](https://djangoalevel.s3.eu-central-1.amazonaws.com/lesson47/Security-group.png)
+
+Кликаем на `Edit inbound rules`.
+
+Добавляем правило `Custom TCP` для порта 8000:
+
+![](https://djangoalevel.s3.eu-central-1.amazonaws.com/lesson47/edit-rules.png)
+
+После этого можно запустить команду `runserver` с такими правилами:
+
+```python manage.py runserver 0.0.0.0:8000```
+
+Если вы всё сделали правильно, то теперь вы можете открыть в браузере IP адрес, который вам выдал Amazon, с портом 8000:
+
+```
+# Например
+http://54.186.155.252:8000/
+```
+
+Обратите внимание, сайт откроется БЕЗ СТАТИКИ, потому что `runserver` при `DEBUG = False` не должен обрабатывать 
+статику.
+
+## Проверяем gunicorn
+
+Устанавливаем gunicorn
+
+```pip install gunicorn```
+
+Как вы помните, **gunicorn** - это WSGI сервер. Если вы откроете папку с `settings.py`, то вы увидите там еще два
+файла `wsgi.py` и `asgi.py`.
+
+Они нужны для того, чтобы запускать сервера в "боевом" режиме.
+
+Для проверки работы gunicorn запустим сервер через него:
+
+```gunicorn --bind 0.0.0.0: 8000 Proj.wsgi```
+
+Где `Proj` - это название папки, в котором лежит файл `wsgi.py`.
+
+Опять же, если вы всё сделали правильно, то тот же самый URL всё ещё будет работать.
+
+```
+# Например
+http://54.186.155.252:8000/
+```
+
+## Понятие сокет-файла
+
+В Linux абсолютно всё - это файл. Развёрнутый сервер - это тоже файл. Так вот, если мы используем два сервера, и один
+слушает второй, то давайте разворачивать первый тоже как файл. Такой файл будет называться сокет-файлом.
+
+## Демонизация gunicorn
+
+Запускать сервер руками очень увлекательно, но не очень эффективно, давайте демонизируем gunicorn для запуска
+сервера в сокет-файл, и сделаем так, чтобы этот сервер запускался сразу при запуске системы, чтобы даже если мы
+перезагрузим инстанс, сервер всё равно работал.
+
+Воспользуемся встроенной в Linux системой `systemd` (системная демонизация).
+
+Создадим системный файл для описания сокета:
+
+```sudo nano /etc/systemd/system/gunicorn.socket```
+
+```
+#/etc/systemd/system/gunicorn.socket
+
+[Unit]
+Description=gunicorn socket
+
+[Socket]
+ListenStream=/home/ubuntu/proj/run/gunicorn.sock
+
+[Install]
+WantedBy=sockets.target
+```
+
+Блок `Unit` отвечает за описание демона.
+
+Блок `Socket` отвечает за то, где будет находиться файл сокета, `proj` в данном случае - название папки с проектом, 
+`run` - название папки с файлом сокета (так почему-то принято называть).
+
+Блок `Install` отвечает за автоматический запуск при запуске системы.
+
+Сохраните файл и закройте его.
+
+Теперь нужно создать файл сервиса, который и будет выполнять запуск:
+
+```sudo nano /etc/systemd/system/gunicorn.service```
+
+Названия сервиса и сокета должны совпадать:
+
+```
+[Unit]
+Description=gunicorn daemon
+Requires=gunicorn.socket
+After=network.target
+
+[Service]
+User=ubuntu
+Group=www-data
+WorkingDirectory=/home/ubuntu/myprojectdir
+EnvironmentFile=/home/ubuntu/.env
+ExecStart=/home/ubuntu/venv/bin/gunicorn \
+          --access-logfile - \
+          --workers 3 \
+          --bind unix:/home/ubuntu/myprojectdir/run/gunicorn.sock \
+          myproject.wsgi:application
+
+[Install]
+WantedBy=multi-user.target
+```
+
+Блок `Unit`:
+
+- `Description` - описание.
+- `Requires` - связывает сервис с сокетом.
+- `After` - отвечает за то, чтобы запускать модуль только после того, как будет доступ в интернет.
+
+Блок `Service`:
+
+- `User` - пользователь, который должен запускать скрипт, если мы используем стандартного юзера, то это будет `ubuntu`.
+
+- `Group` - группа безопасности, по дефолту - это `www-data`.
+
+- `WorkingDirectory` - папка, из которой будет запускаться скрипт, в нашем случае это папка с проектом, где лежит
+   `manage.py`.
+
+- `EnvironmentFile` - файл с переменными.
+  
+- `ExecStart` - сам скрипт, нам нужно запустить gunicorn из виртуального окружения, но мы не можем запустить
+  сначала `source`, но при создании виртуального окружения, мы всего-то складываем все скрипты в другую папку.
+
+  `/home/ubuntu/venv/bin/gunicorn` - это физическое расположение скрипта
+  `--access-logfile - --workers 3 --bind unix:/home/ubuntu/myprojectdir/run/gunicorn.sock myproject.wsgi:application`
+  Это настройки самого скрипта, `log level` - это место для записи логов, `worker` - их количество, `bind` - место, куда
+  сложить файл (`unix`: значит, что будет файл), `myproject` - название папки, где лежит `wsgi.py`
+
+Блок `Install` отвечает за автоматический запуск при запуске системы для любого пользователя.
+
+Сохраняем файл и закрываем.
+
+Для запуска сокета нужно запустить его из системы:
+
+```
+sudo systemctl start gunicorn.socket
+sudo systemctl enable gunicorn.socket
+```
+
+В следующий раз этого делать не нужно, всё запустится автоматически.
+
+### Проверим запуск сокета
+
+```sudo systemctl status gunicorn.socket```
+
+Если тут мы не видим никаких ошибок, то нужно проверить наличие файла сокета. Если всё есть, то создание сокета
+работает.
+
+Проверим его активацию:
+
+```sudo systemctl status gunicorn```
+
+Должны увидеть примерно такой статус:
+
+```
+gunicorn.service - gunicorn daemon
+   Loaded: loaded (/etc/systemd/system/gunicorn.service; disabled; vendor preset: enabled)
+   Active: inactive (dead)
+```
+
+Попробуем выполнить запрос к нашему сокету:
+
+```curl --unix-socket /home/ubuntu/proj/run/gunicorn.sock localhost```
+
+И проверим статус еще раз, теперь он будет `active`
+
+### Рестарт gunicorn
+
+Теперь мы можем перезапускать наш сокет за 1 команду:
+
+```sudo systemctl restart gunicorn```
+
+## Nginx
+
+**Nginx** - это веб сервер, гибкий и мощный веб-сервер.
+
+Для проверки работы Nginx давайте настроим базовый доступ к Nginx для нашего IP адреса, и не забываем добавить 80 порт
+в секьюрити группы Amazon.
+
+Настроим Nginx, если вы установили Nginx (мы сделали это первым действием на этом инстансе), то у вас будет
+существовать папка с базовыми настройками Nginx, давайте создадим новую настройку:
+
+```sudo nano /etc/nginx/sites-available/myproject```
+
+Где `myproject` - это название вашего проекта.
+
+```
+server {
+    listen 80;
+    server_name 54.186.155.252;
 }
 ```
 
-### HyperlinkedRelatedField
+Сохранить и закрыть, пробросить симлинк в соседнюю папку, которую по дефолту обслуживает Nginx:
 
-```python
-class AlbumSerializer(serializers.ModelSerializer):
-    tracks = serializers.HyperlinkedRelatedField(
-        many=True,
-        read_only=True,
-        view_name='track-detail'
-    )
+```sudo ln -s /etc/nginx/sites-available/myproject /etc/nginx/sites-enabled/```
 
-    class Meta:
-        model = Album
-        fields = ['album_name', 'artist', 'tracks']
+**ОБЯЗАТЕЛЬНО! Добавить 80 порт в security groups, разрешенные на Amazon!!!**
+
+Если вы всё сделали правильно, то по вашему IP адресу без указания порта будет открыта базовая страница Nginx:
+
+![](https://djangoalevel.s3.eu-central-1.amazonaws.com/lesson47/nginx_welcome.png)
+
+Чтобы Nginx начал проксировать наш проект, нужно его указать:
+
+```sudo nano /etc/nginx/sites-available/myproject```
+
 ```
-
-Вернёт ссылку на обработку объекта, как работает эта магия поговорим на следующем занятии.
-
-```json
-{
-  "album_name": "Graceland",
-  "artist": "Paul Simon",
-  "tracks": [
-    "http://www.example.com/api/tracks/45/",
-    "http://www.example.com/api/tracks/46/",
-    "http://www.example.com/api/tracks/47/"
-  ]
+server {
+    listen 80;
+    server_name some_IP_or_url;
+    location / {
+        include proxy_params;
+        proxy_pass http://unix:/home/ubuntu/path/to/my/socket/gunicorn.sock;
+    }
 }
+
+
 ```
 
-### SlugRelatedField
+Перезапускаем Nginx и проверяем:
 
-```python
-class AlbumSerializer(serializers.ModelSerializer):
-    tracks = serializers.SlugRelatedField(
-        many=True,
-        read_only=True,
-        slug_field='title'
-    )
+```sudo systemctl restart nginx```
 
-    class Meta:
-        model = Album
-        fields = ['album_name', 'artist', 'tracks']
+Всё должно работать, но без статики.
+
+Вспомним самое начало лекции, что мы можем придумать куда команда `collectstatic` должна сложить статику. Запускаем 
+команду и указываем Nginx, что нужно обрабатывать статику и медиа.
+
 ```
+server {
+    listen 80;
+    server_name 34.221.249.152;
 
-Вернёт то, что указано в атрибуте `slug_field`
-
-```json
-{
-    "album_name": "Dear John",
-    "artist": "Loney Dear",
-    "tracks": [
-        "Airport Surroundings",
-        "Everything Turns to You",
-        "I Was Only Going Out"
-    ]
+    location /static/ {
+        root /home/ubuntu/deployment;
+    }
+    location /media/ {
+        root /home/ubuntu/deployment;
+    }
+    location / {
+        include proxy_params;
+        proxy_pass http://unix:/home/ubuntu/path/to/my/socket/gunicorn.sock;
+    }
 }
+
 ```
 
-И другие. О том как сделать записываемые вложенные сериалайзеры и многое другое, читайте в документации.
+Перезапускаем Nginx и наслаждаемся результатом!
 
-## Немного забегая вперёд
+**Не забываем закрыть 8000 порт и на инстансе, и на Amazon в секьюрити группе!!**
 
-Далее мы будем подробно рассматривать все особенности DRF и как превратить код в API, но в данный момент самым важным
-для нас является то, что DRF предоставляет для нас полный функционал работы с API, самый простой пример использования
-API выглядит так:
+```sudo ufw delete allow 8000```
+
+## Сервисы Amazon
+
+Amazon - это не только инстансы, это огромная, нет **ОГРОМНАЯ** экосистема из очень большого количества различных 
+сервисов, которые мы можем использовать для своих нужд, там есть почти всё :) даже генераторы нейросетей.
+
+Нас на данном этапе интересует несколько сервисов:
+
+- **RDS** (*Relational Database Service*) - сервис по использованию SQL баз данных, которые будут находиться на Amazon. 
+  Зачем это нужно? Во-первых, это надёжно. Мы уверены, что БД находится в облаке, мы за неё платим и Amazon гарантирует
+  её сохранность. В случае хранения БД на инстансе, БД в случае чего удалится вместе с инстансом. Во-вторых, в случае
+  микросервисной архитектуры микросервисы физически могут находиться на совершенно разных машинах, а требуется
+  использовать одну и ту же БД. Облачная БД - лучший для этого выбор. В-третьих, при использовании Amazon RDS не
+  требуется настраивать систему резервных копий, она уже предоставлена экосистемой Amazon в несколько кликов.
+
+- **S3 Bucket** - это просто хранилище для файлов. Используется для адекватного хранения статики и медиа. Преимущества 
+  очень похожи на RDS. Во-первых, мы не потеряем данные статики и медиа в случае "переезда" на новый сервер. Во-вторых,
+  пользовательские медиа могут занимать огромные объемы данных (например, видеофайлы). В случае хранения их на 
+  выделенном сервере мы упираемся в размер сервера (чем больше, тем дороже), а расширять сервер только для "картинок и 
+  видео" не очень разумно. Стоимость S3 Bucket гораздо меньше и удобнее для этих целей. В-третьих, безопасность, когда 
+  вы складываете статику и медиа у себя, доступ к ним есть у всех пользователей. Кто угодно может открыть наш JS 
+  почитать, это не очень безопасно, вдруг у нас там дыры. :) С медиа всё еще хуже, это пользовательские данные, а мы
+  выставляем их на всеобщее обозрение. Это не очень правильно. При использовании S3 Bucket мы можем настроить
+  безопасность, создать пользователя в сервисе IAM (о неё дальше). Django из коробки умеет добавлять безопасный токен
+  при использовании Amazon.
+
+- **IAM** - сервис для настроек безопасности. Всё на самом деле просто, там можно создать юзеров и группы юзеров, и 
+  раздать им права на любые сервисы Amazon. Допустим, одна группа может только настраивать RDS и смотреть на EC2, а 
+  другая обладает полными правами. В нашем случае мы будем создавать пользователя с правами на чтение S3 Bucket и 
+  использовать его credentials для статики и медиа.
+
+- **Route 53** - сервис для настройки DNS и регистрации доменов, будем использовать его для того, чтобы купить домен и
+  преобразовать наш IP в нормальный URL.
+
+## RDS
+
+Мы будем использовать PostgreSQL.
+
+При создании БД вам будет предложено создать мастер пароль для пользователя `postgres`, его надо запомнить :)
+
+После создания базы данных нужно открыть подробности и раздел `Connectivity & security`:
+
+![](https://djangoalevel.s3.eu-central-1.amazonaws.com/lesson48/rds-settings.png)
+
+После чего мы можем открыть PostgreSQL консоль из консоли нашего инстанса:
+
+```psql --host=<DB instance endpoint> --port=<port> --username=<master username> --password```
+
+Создаём пользователя и базу, мы это уже умеем делать.
+
+Допустим, у нас опять user - `myuser`, password - `mypass`, db - `mydb`;
+
+Как подключить RDS к приложению? Добавляем URL в переменные окружения, и база будет подключена.
+
+Не забываем провести миграции, мы подключили новую базу!
+
+## IAM
+
+Для использования S3 Bucket нам необходим специальный юзер, которого мы можем создать в IAM
+
+![](https://djangoalevel.s3.eu-central-1.amazonaws.com/lesson48/IAM-accesslevel.png)
+
+Выбираем `Programmatic access` наш пользователь не будет заходить в настройки, только генерировать токен.
+
+![](https://djangoalevel.s3.eu-central-1.amazonaws.com/lesson48/IAM-permissions.png)
+
+Добавляем пользователю полные права на S3 Bucket.
+
+Обязательно сохраняем ключи от пользователя.
+
+![](https://djangoalevel.s3.eu-central-1.amazonaws.com/lesson48/IAM-creeds.png)
+
+Никогда, нет, **НИКОГДА** не выкладываем эти ключи на git (в `settings.py` или где-либо еще). Amazon мониторит 
+абсолютно весь интернет. :) И если ваши ключи окажутся в открытом репозитории, пользователь будет мгновенно 
+заблокирован, а владельцу аккаунта напишут об этом письмо и позвонят, чтобы предупредить.
+
+## S3 Bucket
+
+Создадим новый S3 Bucket в регионе `us-east-1`, с ним самая простая настройка.
+
+С полностью закрытым доступом к файлам.
+
+Для использования S3 в нашем проекте нужно доставить Python модули:
+
+```pip install django-storages boto3```
+
+Если вы будете использовать S3 и локально, то можно установить пакеты и локально, но чаще всего для локальных тестов
+внешние сервисы не используются.
+
+Для использования нужно добавить `storages` в `INSTALLED_APPS`:
 
 ```python
-from django.conf.urls import url, include
-from django.contrib.auth.models import User
-from rest_framework import routers, serializers, viewsets
-
-
-# Serializers define the API representation.
-class UserSerializer(serializers.HyperlinkedModelSerializer):
-    class Meta:
-        model = User
-        fields = ['url', 'username', 'email', 'is_staff']
-
-
-# ViewSets define the view behavior.
-class UserViewSet(viewsets.ModelViewSet):
-    queryset = User.objects.all()
-    serializer_class = UserSerializer
-
-
-# Routers provide an easy way of automatically determining the URL conf.
-router = routers.DefaultRouter()
-router.register(r'users', UserViewSet)
-
-# Wire up our API using automatic URL routing.
-# Additionally, we include login URLs for the browsable API.
-urlpatterns = [
-    url(r'^', include(router.urls)),
-    url(r'^api-auth/', include('rest_framework.urls', namespace='rest_framework'))
+INSTALLED_APPS = [
+    ...,
+    'storages',
 ]
 ```
 
-# Практика / Домашнее задание:
+после чего достаточно добавить настройки:
 
-1. Создать сериалайзер для обработки данных из 1 задания из лекции про формы (Напишите форму, в которой можно указать
-   имя, пол, возраст и уровень владения английским (выпадающим списком), если введенные данные это парень старше 20-и (
-   включительно) и уровнем английского B2 выше, или девушка старше 22-ух и уровнем выше чем B1 то перейти на страницу
-   где будет написано, что вы нам подходите, или что не подходит соответственно.)
+```python
+# Optional
+AWS_S3_OBJECT_PARAMETERS = {
+    'Expires': 'Thu, 31 Dec 2099 20:00:00 GMT',
+    'CacheControl': 'max-age=94608000',
+}
+# Required
+AWS_STORAGE_BUCKET_NAME = 'BUCKET_NAME'
+AWS_S3_REGION_NAME = 'REGION_NAME'  # e.g. us-east-2
+AWS_ACCESS_KEY_ID = 'xxxxxxxxxxxxxxxxxxxx'
+AWS_SECRET_ACCESS_KEY = 'yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy'
+# НЕ ВПИСЫВАЙТЕ САМИ КЛЮЧИ, ТОЛЬКО os.environ.get('SOME_KEY')
 
-   1.1 Зайти в shell. Заполнить сериалайзер через `data=` данными. Убедиться что валидация работает в соответствии с требованиями. Прислать мне скрины.
+# Tell the staticfiles app to use S3Boto3 storage when writing the collected static files (when
+# you run `collectstatic`).
+STATICFILES_STORAGE = 'storages.backends.s3boto3.S3Boto3Storage'
+```
 
-2. Создать сериалайзеры для Юзера, Покупки, Товара.
+Этого достаточно, чтобы команда `collectstatic` собирала всю статику в S3 Bucket от Amazon, а template tag `static`
+генерировал URL с параметрами безопасности, получить такую статику просто так нельзя.
 
-   2.1 Создать объект Юзера, Товара, Покупки, связанных между собой (данные передать через `data=`), прислать мне скрины
+`AWS_S3_OBJECT_PARAMETERS` - необязательный параметр, чтобы указать настройки объектов, параметров довольно много.
 
-   2.2 Получить объекты из базы, передать в сериалайзер без `data=`, посмотреть что у них хранится в атрибуте `.data`
+Но при такой настройке вся статика будет просто сложена в S3 Bucket, как на свалке, куда же мы поместим медиа?
 
-3. Написать сериалайзер для Покупки (новый), который будет хранить вложенный сералайзер Юзера.
-   
-   3.1 Получить данные любого товара вместе с данными о юзере. Прислать скрины.
+Чтобы сложить статику и медиа в один S3 Bucket, нужно создать новые классы для storages, где указать папки для хранения
+разных типов данных.
 
-4. Написать сериалайзер для Юзера, который будет хранить все его Покупки и выдавать их списком из словарей. (`many=True`)
+Создадим файл `custom_storages.py` на одном уровне с `settings.py`.
 
-   4.1 Получить данные любого юзера, прислать скрины.
+```python
+# custom_storages.py
+from django.conf import settings
+from storages.backends.s3boto3 import S3Boto3Storage
 
-5*. Дописать сериалайзеры из пунктов 4 и 5 так, что бы можно было создавать объекты. (Это сложно)
+
+class StaticStorage(S3Boto3Storage):
+    location = settings.STATICFILES_LOCATION
+
+
+class MediaStorage(S3Boto3Storage):
+    location = settings.MEDIAFILES_LOCATION
+```
+
+А в `settings.py` укажем:
+
+```python
+# settings.py
+STATICFILES_LOCATION = 'static'
+STATICFILES_STORAGE = 'custom_storages.StaticStorage'
+
+MEDIAFILES_LOCATION = 'media'
+DEFAULT_FILE_STORAGE = 'custom_storages.MediaStorage'
+```
+
+Этого полностью достаточно, чтобы команда `collectstatic` собрала всё статику в папку `static` на S3 Bucket, а любые
+загруженные пользователями файлы - в папку `media`.
+
+Добавляем все необходимые переменные окружения, запускаем `collectstatic`, убеждаемся, что всё собрано правильно, и
+статика работает, так же можем попробовать загрузить что-либо и убедиться, что медиа грузится правильно (если такой
+функционал заложен в проект).
+
+При таком подходе Nginx не обрабатывает статику и медиа, а значит, что эти строки можно не вносить (или удалить из
+конфига).
+
+## Route 53
+
+Route 53 - это сервис, где вы можете зарегистрировать домен, и привязать его к вашему IP адресу, чтобы использовать URL,
+а не IP.
+
+Я заранее купил домен `a-level-test.com` :) Поэтому, если я открою вкладку `Hosted zones`, то увижу:
+
+![](https://djangoalevel.s3.eu-central-1.amazonaws.com/lesson48/hosted-zones.png)
+
+Создам новую запись в `hosted zone`:
+
+![](https://djangoalevel.s3.eu-central-1.amazonaws.com/lesson48/route53-record.png)
+
+В поле `value` я указал IP, который выдал мне Amazon к моему инстансу.
+
+В `settings.py` в `ALLOWED_HOSTS` нужно добавить новый URL.
+
+```python
+...
+DEBUG = False
+ALLOWED_HOSTS = ['a-level-test.com']
+...
+```
+
+Пулим новый код, перезапускаем gunicorn:
+
+```sudo systemctl restart gunicorn```
+
+После этого мне нужно обновить Nginx и поменять там `server_name`;
+
+```
+server {
+    listen 80;
+    server_name a-level-test.com;
+
+    location / {
+        include proxy_params;
+        proxy_pass http://unix:/home/ubuntu/deployment/r/gunicorn.sock;
+    }
+}
+```
+
+Перезапускаем Nginx:
+
+```sudo service nginx restart```
+
+Открываем URL, убеждаемся, что всё работает и статика не потерялась.
+
+## HTTPS. Certbot
+
+Наше соединение работает, но при этом абсолютно не защищено. Почему мы не сделали его безопасным раньше? Всё просто,
+сертификат для включения `https` привязывается к URL, а не к IP адресу.
+
+Сделать это можно очень просто и в практически автоматическом режиме.
+
+Для начала необходимо доставить на сервер некоторые модули:
+
+```sudo apt install certbot python3-certbot-nginx```
+
+И выполнить команду:
+
+```sudo certbot --nginx -d a-level-test.com```
+
+После параметра `-d` указывается `server_name` из Nginx;
+
+Certbot спросит у вас почту, если это первый запуск, попросит принять условия и указать, редиректить небезопасное
+соединение в безопасное или нет, всё зависит от ваших условий.
+
+Он автоматически заменит и перезапустит конфигурацию Nginx:
+
+```
+server {
+    server_name a-level-test.com;
+
+    location / {
+        include proxy_params;
+        proxy_pass http://unix:/home/ubuntu/deployment/r/gunicorn.sock;
+    }
+
+    listen 443 ssl; # managed by Certbot
+    ssl_certificate /etc/letsencrypt/live/a-level-test.com/fullchain.pem; # managed by Certbot
+    ssl_certificate_key /etc/letsencrypt/live/a-level-test.com/privkey.pem; # managed by Certbot
+    include /etc/letsencrypt/options-ssl-nginx.conf; # managed by Certbot
+    ssl_dhparam /etc/letsencrypt/ssl-dhparams.pem; # managed by Certbot
+
+}
+server {
+    if ($host = a-level-test.com) {
+        return 301 https://$host$request_uri;
+    } # managed by Certbot
+
+
+    listen 80;
+    server_name a-level-test.com;
+    return 404; # managed by Certbot
+
+
+}
+```
+
+### Открыть на Amazon 443 порт
+
+Не забываем открыть порт номер 443 для нашего инстанса.
+
+![](https://djangoalevel.s3.eu-central-1.amazonaws.com/lesson48/https-setting.png)
+
+Всё, пробуем открыть сайт и видим, что он теперь безопасен.
+
+### Автообновление сертификата
+
+Сертификаты *Let’s Encrypt* действительны только в течение 90 дней. Это сделано для стимулирования пользователей к
+автоматизации процесса обновления сертификатов. Установленный нами пакет `certbot` выполняет это автоматически, добавляя
+таймер `systemd`, который будет запускаться два раза в день и автоматически продлевать все сертификаты, истекающие
+менее, чем через 30 дней.
+
+Чтобы протестировать процесс обновления, можно сделать запуск «вхолостую» с помощью `certbot`:
+
+```sudo certbot renew --dry-run```
+
+Если ошибок нет, все нормально. Certbot будет продлевать ваши сертификаты, когда это потребуется, и перезагружать Nginx
+для активации изменений. Если процесс автоматического обновления когда-нибудь не выполнится, то *Let’s Encrypt*
+отправит сообщение на указанный вами адрес электронной почты с предупреждением о том, что срок действия сертификата 
+подходит к концу.

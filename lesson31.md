@@ -1,830 +1,808 @@
-# Урок 31. Django ORM. Объекты моделей и queryset, Meta моделей, прокси модели.
+# Лекция 31. REST аутентификация. Авторизация. Permissions. Фильтрация.
 
-![](https://cs8.pikabu.ru/post_img/2016/09/12/5/og_og_1473660997242355939.jpg)
+![](https://encrypted-tbn0.gstatic.com/images?q=tbn%3AANd9GcQ_cLOesie903fmPPbl2YbqawKsycva_owf6Q&usqp=CAU)
 
-Мы уже знаем про то как хранить данные, и как связать таблицы между собой, давайте научимся, извлекать, модифицировать и
-удалять данные при помощи кода.
+## Аутентификация и её виды
 
-Допустим, что ваша модель выглядит так:
+Мы с вами разобрали аутентификацию для работы классического веб-приложения, на самом деле, это был лишь один из видов
+существующих аутентификаций, давайте рассмотрим разные.
+
+### Аутентификация сессией
+
+Основана на данных сессии, которые мы уже рассматривали. Авторизация происходит один раз, после чего информация о
+пользователе хранится в "куках" и передаётся при каждом запросе.
+
+В чём недостатки такого подхода для REST API?
+
+Во-первых, для того чтобы выполнять любые небезопасные методы `POST`, `PUT`, `PATCH`, `DELETE` необходимо использовать
+CSRF Token, а это значит, что для выполнения таких запросов необходимо каждый раз делать дополнительный запрос для
+получения токена.
+
+Во вторых такой подход подразумевает, что сервер хранит информацию о сессиях, такой подход не будет RESTful.
+
+### Базовая аутентификация
+
+Аутентификация основанная на том, что в каждом запросе в хедере запроса будет передаваться логин и пароль необходимого
+пользователя. Чаще всего для использования такого вида аутентификации в запрос добавляется хедер `Authorization` со
+значением, состоящим из слова `Basic` и кодированного при помощи base64 сообщения вида `username:password` например:
+
+`Authorization`: `Basic bXl1c2VyOm15cGFzc3dvcmQ=` для `username` - `myuser`, `password` - `mypassword`
+
+Такая авторизация требует подключения по `https`, так как при обычном `http` запрос легко будет перехватить и
+посмотреть данные авторизации.
+
+### Аутентификация по токену
+
+Базовая аутентификация имеет большое количество плюсов перед сессионной, как минимум отсутствие необходимости делать
+дополнительные запросы, но каждый раз передавать логин и пароль это не самый удобный с точки зрения безопасности способ
+передачи данных.
+
+Поэтому самым частым видом авторизации является авторизация по токену. Что это значит?
+
+**Токен** - это специальный вычисляемый набор символов, уникальный для каждого пользователя.
+
+Токен может быть как постоянным (практически никогда не используется), так и временным, может перегенерироваться по
+времени, так и по запросу.
+
+Алгоритм генерации самого токена тоже может быть практически любым (Чаще всего просто генерация большой случайной hex
+(шестнадцатеричной) строки), как и данные, на которых он основан (при случайном токен входных данных нет, но может быть
+основан на каких-либо личных данных, на метках времени и т. д.)
+
+### Внешняя аутентификация
+
+Благодаря механизму токенов, за авторизацию может отвечать вообще не ваш сервер. Допустим, если взять классическую
+авторизацию через соцсети, то генератором токена является сама соцсеть, мы лишь предоставляем данные для авторизации
+соцсети. В ответ получаем токен, при этом мы понятия не имеем, как именно его генерирует условный фейсбук, но всегда
+можно убедится в его правильности, обратившись к API соцсети.
+
+По такому же принципу сервером авторизации может быть практически любой внешний сервер, с которым есть предварительная
+договорённость. Допустим, вы работаете с командой, которая его разрабатывает, и можете узнать, как этим пользоваться.
+Для открытых соцсетей обычно есть документация по использованию их API, где подробно написано, как пользоваться их
+авторизацией. Также для таких механизмов существует большое количество уже написанных packages.
+
+## Реализация и использование в Django REST Framework
+
+Из-за CSRF токенов авторизация через сессию практически не используется, поэтому мы не будем подробно её рассматривать
+
+### Basic Аутентификация
+
+Чтобы использовать Basic аутентификацию, достаточно добавить в настройку `REST_FRAMEWORK`, в `settings.py`:
 
 ```python
-from django.db import models
+REST_FRAMEWORK = {
+    'DEFAULT_AUTHENTICATION_CLASSES': [
+        'rest_framework.authentication.BasicAuthentication',
+    ]
+}
+```
+
+Если нам необходимо использовать несколько аутентификаций, мы можем указать их в списке, например:
+
+```python
+REST_FRAMEWORK = {
+    'DEFAULT_AUTHENTICATION_CLASSES': [
+        'rest_framework.authentication.BasicAuthentication',
+        'rest_framework.authentication.SessionAuthentication',
+    ]
+}
+```
+
+Этого достаточно, чтобы при любом запросе сначала проверялся хедер авторизации, и в случае правильных логина и пароля
+пользователь добавлялся в реквест.
+
+Если необходимо добавить классы авторизация прям во вью, можно указать их через аттрибут `authentication_classes` для
+Class-Based View и такой же декоратор для функциональной вью.
+
+```python
+from rest_framework.authentication import SessionAuthentication, BasicAuthentication
+from rest_framework.response import Response
+from rest_framework.views import APIView
+
+
+class ExampleView(APIView):
+    authentication_classes = [SessionAuthentication, BasicAuthentication]
+
+    def get(self, request, format=None):
+        content = {
+            'user': unicode(request.user),  # `django.contrib.auth.User` instance.
+            'auth': unicode(request.auth),  # None
+        }
+        return Response(content)
+```
+
+```python
+@api_view(['GET'])
+@authentication_classes([SessionAuthentication, BasicAuthentication])
+def example_view(request, format=None):
+    content = {
+        'user': unicode(request.user),  # `django.contrib.auth.User` instance.
+        'auth': unicode(request.auth),  # None
+    }
+    return Response(content)
+```
+
+### Авторизация по токену
+
+Если необходимо использовать токен авторизацию, то DRF предоставляет нам такой функционал "из коробки", для этого нужно
+добавить `rest_framework.authtoken` в `INSTALLED_APPS`
+
+```python
+INSTALLED_APPS = [
+    ...
+    'rest_framework.authtoken'
+]
+```
+
+И указать необходимую авторизацию в `settings.py`:
+
+```python
+REST_FRAMEWORK = {
+    'DEFAULT_AUTHENTICATION_CLASSES': [
+        ...
+        'rest_framework.authentication.TokenAuthentication',
+    ]
+}
+```
+
+После этого обязательно нужно провести миграции этого приложения `python manage.py migrate`
+
+Чтобы создать токены для уже существующих юзеров, нужно сделать это вручную (или написать дата миграцию).
+
+```python
+from rest_framework.authtoken.models import Token
+
+token = Token.objects.create(user=...)
+print(token.key)
+```
+
+После этого можно использовать авторизацию токеном:
+
+```Authorization: Token 9944b09199c62bcf9418ad846dd0e4bbdfc6ee4b```
+
+#### Генерация токенов
+
+Чаще всего генерацию токенов "вешают" на сигналы:
+
+```python
+from django.conf import settings
+from django.db.models.signals import post_save
+from django.dispatch import receiver
+from rest_framework.authtoken.models import Token
+
+
+@receiver(post_save, sender=settings.AUTH_USER_MODEL)
+def create_auth_token(sender, instance=None, created=False, **kwargs):
+    if created:
+        Token.objects.create(user=instance)
+```
+
+#### Получение токена
+
+Для получения токена можно использовать стандартную вью, для этого нужно добавить в URLs `obtain_auth_token`:
+
+```python
+from rest_framework.authtoken import views
+
+urlpatterns += [
+    path('api-token-auth/', views.obtain_auth_token)
+]
+```
+
+Если необходимо изменить логику получения токена, то это можно сделать, отнаследовавшись
+от `from rest_framework.authtoken.views import ObtainAuthToken`:
+
+```python
+from rest_framework.authtoken.views import ObtainAuthToken
+from rest_framework.authtoken.models import Token
+from rest_framework.response import Response
+
+
+class CustomAuthToken(ObtainAuthToken):
+
+    def post(self, request, *args, **kwargs):
+        serializer = self.serializer_class(data=request.data,
+                                           context={'request': request})
+        serializer.is_valid(raise_exception=True)
+        user = serializer.validated_data['user']
+        token, created = Token.objects.get_or_create(user=user)
+        return Response({
+            'token': token.key,
+            'user_id': user.pk,
+            'email': user.email
+        })
+```
+
+Не забыв заменить URLs:
+
+```python
+urlpatterns += [
+    path('api-token-auth/', CustomAuthToken.as_view())
+]
+```
+
+### Кастомная авторизация
+
+Кроме своего токена и своего способа его получения, можно также расписать и свою собственную авторизацию, для этого
+нужно отнаследоваться от базовой и описать нужные методы:
+
+```python
 from django.contrib.auth.models import User
-from django.utils import timezone
-from django.utils.translation import gettext as _
-
-GENRE_CHOICES = (
-    (1, _("Not selected")),
-    (2, _("Comedy")),
-    (3, _("Action")),
-    (4, _("Beauty")),
-    (5, _("Other"))
-)
+from rest_framework import authentication
+from rest_framework import exceptions
 
 
-class Author(models.Model):
-    pseudonym = models.CharField(max_length=120, blank=True, null=True)
-    name = models.CharField(max_length=120)
+class ExampleAuthentication(authentication.BaseAuthentication):
+    def authenticate(self, request):
+        username = request.META.get('HTTP_X_USERNAME')
+        if not username:
+            return None
 
-    def __str__(self):
-        return self.name
+        try:
+            user = User.objects.get(username=username)
+        except User.DoesNotExist:
+            raise exceptions.AuthenticationFailed('No such user')
 
-
-class Article(models.Model):
-    author = models.ForeignKey(Author, on_delete=models.CASCADE, null=True, related_name='articles')
-    text = models.TextField(max_length=10000, null=True)
-    created_at = models.DateTimeField(default=timezone.now)
-    updated_at = models.DateTimeField(default=timezone.now)
-    genre = models.IntegerField(choices=GENRE_CHOICES, default=1)
-
-    def __str__(self):
-        return "Author - {}, genre - {}, id - {}".format(self.author.name, self.genre, self.id)
-
-
-class Comment(models.Model):
-    text = models.CharField(max_length=1000)
-    article = models.ForeignKey(Article, on_delete=models.DO_NOTHING)
-    comment = models.ForeignKey('myapp.Comment', null=True, blank=True, on_delete=models.DO_NOTHING,
-                                related_name='comments')
-    user = models.ForeignKey(User, on_delete=models.DO_NOTHING)
-
-    def __str__(self):
-        return "{} by {}".format(self.text, self.user.username)
-
-
-class Like(models.Model):
-    user = models.ForeignKey(User, on_delete=models.DO_NOTHING)
-    article = models.ForeignKey(Article, on_delete=models.DO_NOTHING)
-
-    def __str__(self):
-        return "By user {} to article {}".format(self.user.username, self.article.id)
-
+        return (user, None)
 ```
 
-Рассмотрим некоторые новые возможности
+### Manage-команда drf_create_token
+
+```python manage.py drf_create_token <username>```
+
+Принимает параметр `username` и генерирует токен для такого юзера, если необходимо, то можно перегенерировать при помощи
+флага `-r`
+
+```
+python manage.py drf_create_token -r <username>
+```
+
+### Немного о реальности
+
+На практике практически всегда необходимо переписать токен под свои задачи, как минимум ограничить его время для жизни и
+сделать перегенерацию по истечении времени жизни, сделаем это как практику на этом занятии.
+
+### Внешние сервисы
+
+По сути, каждый отдельный сервис имеет свою логику, чаще всего у нас будут специальные пакеты для использования таких
+аутентификаций, а если нет, то их всегда можно написать. :)
+
+### Авторизация для тестирования через браузер
+
+В REST фреймворк встроена возможность тестировать API через браузер, используя сессионную авторизацию. Для этого
+достаточно добавить встроенные URLs и перейти по этому адресу, после этого по вашим API URLs вы будете переходить как
+уже авторизированный пользователь:
 
 ```python
-from django.contrib.auth.models import User
+urlpatterns += [
+    path('api-auth/', include('rest_framework.urls')),
+]
 ```
 
-Это модель встроенного в Django юзера, её мы рассмотрим немного позже.
+## Permissions
+
+Они же права доступа.
+
+Задать разрешения можно на уровне проекта и на уровне ресурса.
+
+Чтобы задать на уровне проекта, в `settings.py` необходимо добавить:
 
 ```python
-from django.utils.translation import gettext as _
+REST_FRAMEWORK = {
+    'DEFAULT_PERMISSION_CLASSES': [
+        'rest_framework.permissions.IsAuthenticated',
+    ]
+}
 ```
 
-Стандартная функция перевода языка для Django, допустим что ваш сайт имеет функцию переключения языка, с русского,
-украинского и английского, эта функция поможет нам в будущем указать значения для всех трех языков. Подробнейшая
-информация по переводам [Тут](https://docs.djangoproject.com/en/3.1/topics/i18n/translation/)
+Для описания на уровне объектов используется аргумент `permission_classes`:
 
 ```python
-GENRE_CHOICES = (
-    (1, _("Not selected")),
-    (2, _("Comedy")),
-    (3, _("Action")),
-    (4, _("Beauty")),
-    (5, _("Other"))
-)
+from rest_framework import permissions
+
+
+class ExampleModelViewSet(ModelViewSet):
+    permission_classes = [permissions.IsAuthenticatedOrReadOnly]
 ```
 
-Переменная состоящая из тупла туплов (могла быть, любая коллекция коллекций), нужна для использования choices значений,
-используется для хранения выбора чего-либо, в нашем случае жанра, в базе будет храниться только число, а пользователю
-будет выводиться уже текст.
+Существует достаточно много заготовленных пермишенов.
 
-Используем это вот тут:
+```
+AllowAny - можно всем
+IsAuthenticated - только авторизированным пользователям
+IsAdminUser - только администраторам
+IsAuthenticatedOrReadOnly - залогиненым или только на чтение
+```
+
+Все они изначально наследуются от `rest_framework.permissons.BasePermission`.
+
+Но если нам нужны кастомные, то мы можем создать их, отнаследовавшись от `permissions.BasePermission` и переписав один
+или оба метода `has_permisson()` и `has_object_permission()`
+
+Например, владельцу можно выполнять любые действия, а остальным только чтение объекта:
 
 ```python
-genre = models.IntegerField(choices=GENRE_CHOICES, default=1)
+from rest_framework import permissions
+
+
+class IsOwnerOrReadOnly(permissions.BasePermission):
+    """
+    Custom permission to allow only owners of an object to edit it.
+    """
+
+    def has_object_permission(self, request, view, obj):
+        # Read permissions are allowed to any request,
+        # so we'll always allow GET, HEAD or OPTIONS requests.
+        if request.method in permissions.SAFE_METHODS:
+            return True
+
+        # Write permissions are only allowed to the owner of the snippet.
+        return obj.owner == request.user
+
+    def has_permission(self, request, view):
+        return True
 ```
 
-Рассмотрим вот эту строку
+`has_permission()` - отвечает за доступ к спискам объектов
+`has_object_permission()` - отвечает за доступ к конкретному объекту
+
+Пермишены можно указывать через запятую, если их несколько:
 
 ```python
-return "Author - {}, genre - {}, id - {}".format(self.author.name, self.genre, self.id)
+permission_classes = [permissions.IsAuthenticatedOrReadOnly,
+                      IsOwnerOrReadOnly]
 ```
 
-**self.author.name** - в базе по значению форейн кея хранится айди, но в коде мы можем получить доступ к значениям
-связанной модели, конкретно в этой ситуации, мы берем значение поля **name** из связанной модели **author**.
+Если у вас нет доступов, вы получите вот такой ответ:
 
-Рассмотрим вот эту строку:
+```
+{
+    "detail": "Authentication credentials were not provided."
+}
+```
+
+### Кеширование
+
+Используется декоратор `method_decorator` и методы `cache_page()` и `vary_on_cookie()`:
 
 ```python
-comment = models.ForeignKey('myapp.Comment', null=True, blank=True, on_delete=models.DO_NOTHING,
-                            related_name='comments')
+from django.utils.decorators import method_decorator
+from django.views.decorators.cache import cache_page
+from django.views.decorators.vary import vary_on_cookie
+
+from rest_framework.response import Response
+from rest_framework.views import APIView
+from rest_framework import viewsets
+
+
+class UserViewSet(viewsets.ViewSet):
+
+    # Cache requested url for each user for 2 hours
+    @method_decorator(cache_page(60 * 60 * 2))
+    @method_decorator(vary_on_cookie)
+    def list(self, request, format=None):
+        content = {
+            'user_feed': request.user.get_user_feed()
+        }
+        return Response(content)
+
+
+class PostView(APIView):
+
+    # Cache page for the requested url
+    @method_decorator(cache_page(60 * 60 * 2))
+    def get(self, request, format=None):
+        content = {
+            'title': 'Post title',
+            'body': 'Post content'
+        }
+        return Response(content)
 ```
 
-Модель можно передать не только как класс, но и по имени модели указав приложение `appname.Modelname` (Да мне было лень
-переименовывать приложение из myapp, во что-то читаемое)
+`cache_page` декоратор кеширует только `GET` и `HEAD` запросы со статусом 200.
 
-При такой записи мы создаём связь один ко многим к самому себе, указав при этом black=True, null=True. Можно создать
-коммент без указания родительского комментария, а если создать комментарий со ссылкой на другой, это будет комментарий к
-комментарию, причем это можно сделать любой вложенности.
-
-Кроме описания модели можно было бы использовать текст `self`, работает когда нужно сделать ссылку именно на самого себя
-
-`related_name` - в этой записи нужен для того, что бы получить выборку всех вложенных объектов, мы рассмотрим их немного
-ниже.
-
-## Meta моделей
-
-В некоторых ситуациях нам необходимо иметь возможность задать определённые условия на уровне модели, например порядок
-сохранения объектов или другие особые условия, тут нам на помощь приходит встроенный класс `Meta`
+### Пример использования авторизации в ресурсах
 
 ```python
-from django.db import models
+class SomeModelViewSet(ModelViewSet):
+    serializer_class = SomeSerializer
+    queryset = SomeModel.objects.all()
 
-
-class Ox(models.Model):
-    horn_length = models.IntegerField()
-
-    class Meta:
-        ordering = ["horn_length"]
-        verbose_name_plural = "oxen"
+    def perform_create(self, serializer):
+        serializer.save(user=self.request.user)
 ```
 
-Синтаксис такой конструкции нужно просто запомнить.
+Таким образом, мы можем добавлять объект юзера при сохранении нашего сериалайзера.
 
-В мете может быть большое кол-во свойств моделей, давайте рассмотрим основные (полный
-список [тут](https://docs.djangoproject.com/en/3.1/ref/models/options/))
+## Фильтрация
 
-### ordering
+DRF предоставляет нам огромные возможности для фильтрации, практически не дописывая для этого специальный код.
 
-Содержит список из строк соответствующих названиям полей(атрибутов) могут быть указанны со знаком `-` что бы указать,
-обратный порядок, в каком порядке указанны такой приоритет полей и будет, например, если
-указан ``` ordering = ['name', '-age'] ``` то объекты будут расположены в базе по полю `name` и в случае совпадения
-этого поля, по полю `age`, в обратном порядке.
+### SearchFilter
 
-Может быть указана при помощи `F` объектов, о них позже.
+Как и с другими параметрами, у нас есть два варианта указания фильтрации, общая для всего проекта или конкретная для
+определённого класса или функции.
 
-### unique_together
-
-Принимает коллекцию коллекций, например список списков, каждый список, должен содержать набор строк, с именами полей.
-При указании этого набора, данные поля будут совместно уникальны (Если совместно уникальны имя и фамилия, то может быть
-сколько угодно объектов с именем `Мария`, и сколько угодно объектов с фамилией `Петрова`, но только один объект с такой
-комбинацией.)
-
-```python 
-unique_together = [['driver', 'restaurant'], ['driver', 'phone_number']]
-```
-
-Если есть только одно нужное значение может быть одним списком.
-
-```python 
-unique_together = ['driver', 'restaurant']
-```
-
-### verbose_name и verbose_name_plural
-
-Свойства содержащие строки и отвечающие за то какие имена будут описаны в админке и на уровне таблицы базы данных, в
-единственном и множественно числе соответственно
-
-## Абстрактные и прокси модели
-
-### Абстрактные модели
-
-Абстрактные классы моделей, это `заготовки` под дальнейшие модели которые не создают дополнительных таблиц. Например
-некоторые из ваших моделей должны содержать поле `created_at`, в котором будет храниться информация о том, когда объект
-создан, для этого можно в каждой модели прописать это поле, или один раз описать абстрактную модель с одним полем, и
-наследоваться уже от неё.
-
-Модель как абстрактная указывается в мете.
-
-Синтаксис:
+Для указания общего фильтра на весь проект необходимо добавить в `settings.py` в переменную `REST_FRAMEWORK`:
 
 ```python
-from django.db import models
-
-
-class CommonInfo(models.Model):
-    name = models.CharField(max_length=100)
-    age = models.PositiveIntegerField()
-
-    class Meta:
-        abstract = True
-
-
-class Student(CommonInfo):
-    home_group = models.CharField(max_length=5)
+REST_FRAMEWORK = {
+    ...
+'DEFAULT_FILTER_BACKENDS': ['rest_framework.filters.SearchFilter']
+}
 ```
 
-`Таблица для CommonInfo не будет созданна!!!`
-
-`Meta` не наследуется !!
-
-Для наследования меты нужно использовать вот какой синтаксис (явное наследование меты):
+Для указания в конкретном классе необходимо использовать аргумент `filter_backends`. Принимает коллекцию из фильтров,
+например:
 
 ```python
-from django.db import models
+from rest_framework.filters import SearchFilter, OrderingFilter
 
 
-class CommonInfo(models.Model):
-    name = models.CharField(max_length=100)
-    age = models.PositiveIntegerField()
+class GroupViewSet(ModelViewSet):
+    queryset = Group.objects.all()
+    filter_backends = [SearchFilter, OrderingFilter]
 
-    class Meta:
-        abstract = True
-        ordering = ['name']
-
-
-class Unmanaged(models.Model):
-    class Meta:
-        abstract = True
-        managed = False
-
-
-class Student(CommonInfo, Unmanaged):
-    home_group = models.CharField(max_length=5)
-
-    class Meta(CommonInfo.Meta, Unmanaged.Meta):
-        pass
 ```
 
-### Прокси модели
+Или же соответсвующий декоратор для использования в функциях.
 
-Модель, которая создаётся на уровне языка программирования, но не на уровне базы данных. Используется если нужно
-добавить метод, изменить поведение менеджера итд.
+#### Как пользоваться?
 
-Синтаксис:
+Для использования необходимо добавить в класс параметр `search_fields`
 
 ```python
-from django.db import models
-
-
-class Person(models.Model):
-    first_name = models.CharField(max_length=30)
-    last_name = models.CharField(max_length=30)
-
-
-class MyPerson(Person):
-    class Meta:
-        proxy = True
-
-    def do_something(self):
-        # ...
-        pass
+class GroupViewSet(ModelViewSet):
+    queryset = Group.objects.all()
+    filter_backends = [SearchFilter, OrderingFilter]
+    search_fields = ['name', 'label']
 ```
 
-В базе будет храниться одна таблица, в Django два класса.
+Этот параметр также принимает коллекцию, состоящую из списка полей, по которым необходимо производить поиск.
+
+Теперь у нас есть возможность добавить query параметр `search=` (ключевое слово можно поменять через `settings.py`,
+чтобы искать по указанным полям).
+
+Например:
+
+```
+http://127.0.0.1:9000/api/group/?search=Pyt
+```
+
+Результат будет отфильтрован так, чтобы отобразить только те данные, у которых хотя бы в одном из указанных полей будет
+найдено частичное совпадение без учёта регистра (`lookup icontains`).
+
+Если нам необходим более специфический параметр поиска, существует 4 специальных настройки в параметре `search_fields`:
+
+- `^` Поиск только в начале строки
+- `=` Полное совпадение
+- `@` Поиск по полному тексту (работает на основе индексов, работает только для postgres)
+- `$` Поиск регулярного выражения
+
+Например:
 
 ```python
->> > p = Person.objects.create(first_name="foobar")
->> > MyPerson.objects.get(first_name="foobar")
-< MyPerson: foobar >
+class GroupViewSet(ModelViewSet):
+    queryset = Group.objects.all()
+    filter_backends = [SearchFilter, OrderingFilter]
+    search_fields = ['=name', '^label']
 ```
 
-Часто используется для отображения в админке нескольких таблиц для одного объекта.
+### OrderingFilter
 
-## objects и shell
+Точно также можно добавить ordering фильтр для того, чтобы указывать ordering в момент запроса через query параметр
+`ordering=` (также можно заменить через `settings.py`)
 
-Для доступа или модификации любых данных, у каждой модели есть аттрибут `objects`, который позволяет производить любые
-манипуляции с данными. Он называется менеджер, и при желании его можно переопределить.
-
-Для интерактивного использования кода используется команда
-
-```python manage.py shell```
-
-Эта команда открывает нам консоль с уже импортированными всеми стандартными, но не самописными модулями Django
-
-![](https://djangoalevel.s3.eu-central-1.amazonaws.com/lesson36/clean_shell.png)
-
-Предварительно я создал несколько объектов через админку.
-
-Для доступа к моделям, их нужно импортировать, я импортирую модель Comment
-
-Рассмотрим весь CRUD и дополнительные особенности. Очень подробная информация по всем возможным
-операциям [Тут](https://docs.djangoproject.com/en/3.1/topics/db/queries/)
-
-### R - retrieve
-
-Функции для получения объектов в Django могут возвращать, два типа данных, **объект модели** или **queryset**
-
-Объект, это единичный объект, queryset это по сути список объектов, со своими встроенными методами.
-
-#### all
-
-Для получения всех данных используется метод `all()`, возвращает queryset со всеми существующими объектами этой модели.
-
-![](https://djangoalevel.s3.eu-central-1.amazonaws.com/lesson36/objects_all.png)
-
-#### filter
-
-Для получения отфильтрованных данных, мы используем метод `filter()`
-
-Если указать фильтр без параметров, то он сделает, то же самое что и all.
-
-Какие у фильтра могу быть параметры? Да практически любые, мы можем указать любые поля для фильтрации. Например фильтр
-по полю текст.
+Необходимо указать параметр `ordering_fields`, также принимает коллекцию из полей. Также может принимать специальное
+значение `__all__` для возможности сортировать по любому полю.
 
 ```python
-Comment.objects.filter(text='Hey everyone')
+class GroupViewSet(ModelViewSet):
+    queryset = Group.objects.all()
+    filter_backends = [SearchFilter, OrderingFilter]
+    ordering_fields = ['name', 'label']
 ```
 
-Фильтр по вложенным объектам, выполняется через двойное подчеркивание.
-
-Фильтр по жанру статьи комментария.
-
-```python
-Comment.objects.filter(article__genre=3)
-```
-
-По псевдониму автора.
-
-```python
-Comment.objects.filter(article__author__pseudonym='The king')
-```
-
-По псевдониму автора и жанру (Через запятую можно указать логическое и).
-
-```python
-Comment.objects.filter(article__author__pseudonym='The king', article__genre=3)
-```
-
-Так же у каждого поля существуют встроенные системы лукапов, пишутся с таким же синтаксисом как и доступ к вложенным
-объектам `field__lookuptype=value`
-
-Стандартные лукапы:
-
-`lte` - меньше или равно
-
-`gte` - больше или равно
-
-`lt` - меньше
-
-`gt` - больше
-
-`startswith` - Начинается с
-
-`istartswith` - Начинается с, без учёта регистра
-
-`endswith` - Заканчивается на
-
-`iendswith` - Заканчивается на, без учёта регистра
-
-`range` - находится в рамках
-
-`week_day` - день недели (для дат)
-
-`year` - год (для дат)
-
-`isnull` - является наном
-
-`contains` - частично содержит учитывая регистр ("Всем привет, я Влад" содержит слово "Влад", но не содержит "влад")
-
-`icontains` - то же самое, но регистро независимо, теперь найдется и второй вариант.
-
-`exact` - совпадает (не обязательный лукап, делает то же, что и знак равно)
-
-`iexact` - совпадает регистро независимо (по запросу "привет" найдет и "Привет" и "прИвЕт")
-
-`in` - содержится в каком то списке
-
-Их намного больше, читать [ТУТ](https://docs.djangoproject.com/en/2.2/ref/models/querysets/#field-lookups)
+В query параметре может принимать символ `-` или список полей через запятую.
 
 Примеры:
 
-Псевдоним содержит слово 'king'
+```
+http://example.com/api/users?ordering=username
 
-```python
-Comment.objects.filter(article__author__pseudonym__icontains='king')
+http://example.com/api/users?ordering=-username
+
+http://example.com/api/users?ordering=account,username
 ```
 
-Комменты к статье созданной не позднее чем вчера
+### Свой собственный фильтр
+
+Как и со всем остальным, можно написать свой собственный фильтр, для этого необходимо наследоваться от
+`rest_framework.filters.BaseFilterBackend` и описать один метод `filter_queryset`, в котором можно описать любую логику.
+
+Например, этот фильтр будет отображать только те объекты, которые принадлежат юзеру.
 
 ```python
-Comment.objects.filter(article__created_at__gte=date.today() - timedelta(days=1))
+class IsOwnerFilterBackend(filters.BaseFilterBackend):
+    """
+    Filter that only allows users to see their own objects.
+    """
+
+    def filter_queryset(self, request, queryset, view):
+        return queryset.filter(owner=request.user)
 ```
 
-Комменты к статьям с жанрами под номерами 2 и 3
+## Сложные комплексные фильтры
 
-```python
-Comment.objects.filter(article__genre__in=[2, 3])
+На самом деле, бывают и значительно более сложные фильтры, для которых существуют специальные пакеты.
+
+Например:
+
+```
+pip install django-filter
+pip install djangorestframework-filters
+pip install djangorestframework-word-filter
 ```
 
-#### exclude
+Все они легко настраиваются и значительно расширяют возможность использования фильтров. Изучите их самостоятельно.
 
-Функция обратная функции `filter` вытащит всё что не попадает выборку
+## Живой пример с заметками на DRF
 
-Например все комменты к статьям у которых жанр не 2 и не 3
+Напоминаю условия.
 
-```python
-Comment.objects.exclude(article__genre__in=[2, 3])
-```
+Допустим, нам нужен сайт, на котором можно зарегистрироваться, залогиниться, разлогиниться и написать заметку, если ты
+залогинен. Заметки должны отображаться списком, последняя созданная отображается первой. Все пользователи видят все
+заметки. Возле тех, которые создал текущий пользователь, должна быть кнопка удалить.
 
-Фильтр и эксклюд можно совмещать. К любому кверисету можно применить фильтр или ексклюд еще раз. Например, все комменты
-к статьям созданным не позже чем вчера, с жанрами не 2 и не 3
+В случае с REST, кнопку заменяем просто на возможность это сделать для владельца заметки.
 
-```python
-Comment.objects.filter(article__created_at__gte=date.today() - timedelta(days=1)).exclude(article__genre__in=[2, 3])
-```
+Дополнительно реализуем токен время жизни которого 10 минут, после чего необходимо получать новый.
 
-Все эти функции возвращаю специальный объект называемый queryset, он является коллекцией записей базы (которые
-называются в этой терминологии instance), к любому кверисету можно применить любой метод менджера модели (objects),
-например к только что отфильтрованному кверисету, можно применить фильтр еще раз, итд.
+### Модель сохраняется
 
-#### order_by
-
-По умолчанию все модели сортируются по айди, если явно не указанно иное, но часто нужно отсортировать данные специальным
-образом для этого используется order_by(), при сортировке так же можно указывать вложенные объекты и знак `-`, что бы
-указать сортировку в обратном порядке
+`models.py`
 
 ```python
-Comment.objects.filter(article__created_at__gte=date.today() - timedelta(days=1)).order_by('-article__created_at').all()
-```
-
-Это далеко не всё что можно сделать с queryset
-
-Все методы кверисетов
-читаем [Тут](https://docs.djangoproject.com/en/3.1/ref/models/querysets/#methods-that-return-new-querysets)
-
-Особое внимание на методы `distinct`, `reverse`,  `values`, `difference`
-
-Так же во все фильтры можно вставлять целые объекты, например
-
-```python
-art = Article.objects.get(id=2)
-comments = Comment.object.exclude(article=art)
-```
-
-### Объектные методы
-
-#### get
-
-В отличие от filter и exclude получает сразу объект, работает только если можно определить объект однозначно и он
-существует.
-
-Можно применять те же условия, что и для фильтра и эксклюда
-
-Например получения объекта по айди
-
-```python
-Comment.objects.get(id=3)
-```
-
-Если объект не найден или найдено больше одного объекта по заданным параметрам, вы получите исключение, которое
-желательно всегда обрабатывать. Исключения уже находятся в самой модели.
-
-```python
-try:
-    Comment.objects.get(article__genre__in=[2, 3])
-except Comment.DoesNotExist:
-    return "Can't find object"
-except Comment.MultipleObjectsReturned:
-    return "More than one object"
-```
-
-#### first и last
-
-К кверисету можно применять методы first и last что бы получить первый или последний элемент кверисета
-
-Например получить первый коммент написанный за вчера
-
-```python
-Comment.objects.filter(article__created_at__gte=date.today() - timedelta(days=1)).first()
-```
-
-Информация по всем остальным
-методам [Тут](https://docs.djangoproject.com/en/3.1/ref/models/querysets/#methods-that-do-not-return-querysets)
-
-### related_name
-
-Атрибут релейтед нейм, который указывается для полей связи, является обратной связью, и менеджером для объектов,
-например в нашей модели у поля `author` модели `Article` есть related_name=`articles`:
-
-```python
-a = Author.objects.first()
-articles = a.articles.all()  # тут будут все статьи конкретного автора в виде кверисета, т.к. all() возвращает кверисет
-```
-
-Можно ли получить объекты обратной связи без указания related_name? Можно. Связь появляется автоматически даже без
-указания этого атрибута.
-
-Обратный менеджер формируется из названия модели и конструкции `_set`, допустим у поля `article` модели `Comment` не
-указан related_name:
-
-```python
-a = Article.objects.first()
-a.comment_set.all()  # такой же менеджер как в прошлом примере, вернёт кверисет коментариев относящихся к этой статье.
-```
-
-### C - Create
-
-Для создания новых объектов используется два возможных варианта, через метод, `create` или метод `save`
-
-Создадим двух новых авторов, при помощи разных методов
-
-```python
-Author.objects.create(name='New author by create', pseudonym="Awesome author")
-
-a = Author(name="Another new author", pseudonym="Gomer")
-a.save()
-```
-
-В чём же разница? В том, что в первом случае, при выполнении этой строки запрос в базу будет отправлен сразу, во втором,
-только при вызове метода `save()`
-
-Метод save так же является и методом для апдейта, если применяется для уже существующего объекта, рассмотрим его
-подробнее немного дальше.
-
-### U - Update
-
-Для апдейта используется метод `update()`
-
-**Применяется только к кверисетам, к объекту применить нельзя**
-
-Например обновим текст в комментарии с айди = 3
-
-```python
-Comment.objects.filter(id=3).update(text='bla-bla')
-
-ИЛИ
-
-c = Comment.objects.get(id=3)
-c.text = 'bla-bla'
-c.save()
-```
-
-### D - Delete
-
-Как можно догадаться, выполняется методом `delete()`.
-
-Удалить все комменты от пользователя с айди = 2
-
-```python
-Comment.objects.filter(user__id=2).delete()
-```
-
-### Совмещенные методы
-
-#### get_or_create() update_or_create() bulk_create() bulk_update()
-
-get_or_create - Метод, который попытается создать новый объект если не сможет найти нужный в базе, возвращает сам объект
-и булевое значение, которое обозначает, объект был создан или получен.
-
-update_or_create Обновит если объект существует, создаст если не существует
-
-bulk_create - массовое создание, необходимо для того, что бы избежать большого кол-ва обращений в базу.
-
-bulk_update - массовые апдейт (отличие от обычного в том, что при обычном на каждый объект создается запрос, в этом
-случае запрос делается массово)
-
-Подробно почитать про них [Тут](https://docs.djangoproject.com/en/2.2/ref/models/querysets/#get-or-create)
-
-## Подробнее о методе save
-
-Метод save() применяется при любых изменениях или создании данных, но очень часто нужно что-бы при сохранении данных
-выполнялись еще какие-либо действия, переписывание данных или запись логов итд. Для этого используется переписывание
-метода save(). По сути является способом написать аналог тригера в базе данных.
-
-Метод сейв вызывают или явно, или не явно во время вызова методов создания или обновления, но без него запись в базу не
-будет произведена.
-
-Допустим мы хотим делать время создания статьи на один день раньше чем фактическая. Перепишем метод `save` для статьи
-
-```python
-class MyAwesomModel(models.Model):
-    name = models.CharField(max_lenght=100)
-    created_at = models.DateField()
-
-    def save(self, **kwargs):
-        self.created_at = timezone.now() - timedelta(days=1)
-        super().save(**kwargs)
-```
-
-Переопределяем значение, и вызываем оригинальный save, вуаля.
-
-Для того, что бы переопределить логику при создании, но не трогать при изменении, или наоборот, используется особенность
-данных, у уже созданного объекта `id` существует, у нового нет. Так что фактически наш код сейчас обновляет это поле
-всегда, и когда надо и когда не надо, допишем его.
-
-```python
-class MyAwesomModel(models.Model):
-    name = models.CharField(max_lenght=100)
-    created_at = models.DateField()
-
-    def save(self, **kwargs):
-        if not self.id:
-            self.created_at = timezone.now() - timedelta(days=1)
-        super().save(**kwargs)
-```
-
-Теперь поле будет переписываться только в момент создания, но не будет трогаться при обновлении.
-
-Метод delete(), при удалении объекта `save()` не вызывается, а вызывается `delete()` по аналогии мы можем его
-переписать, например для отправки имейла перед удалением
-
-```python
-class MyAwesomModel(models.Model):
-    name = models.CharField(max_lenght=100)
-    created_at = models.DateField()
-
-    def delete(self, **kwargs):
-        send_email(id=self.id)
-        super().delete(**kwargs)
-```
-
-## Сложные SQL конструкции
-
-Документация по этому разделу
-
-[Тут](https://docs.djangoproject.com/en/3.1/ref/models/expressions/#django.db.models.F)
-[Тут](https://docs.djangoproject.com/en/3.1/ref/models/querysets/#django.db.models.Q)
-
-На самом деле мы не ограниченны стандартными конструкциями, мы можем применять предвычисления на уровне базы, добавлять
-логические конструкции итд., давайте рассмотри подробнее.
-
-### Q объекты
-
-Как вы могли заметить в случае фильтрации, мы можем выбрать объекты через логическое И, при помощи запятой.
-
-```python
-Comment.objects.filter(article__author__pseudonym='The king', article__genre=3)
-```
-
-В этом случае у нас есть конструкция типа "выбрать объекты у которых псевдоним автора статьи это `The king` И жанр статьи это цифра 3"
-
-Но что же нам делать есть нам нужно использовать логическое ИЛИ.
-
-В этом нам поможет использование Q объекта, на самом деле каждое из этих условий мы могли завернуть в такой объект:
-
-```python
-from django.db.models import Q
-
-q1 = Q(article__author__pseudonym='The king')
-q2 = Q(article__genre=3)
-``` 
-
-Теперь мы можем явно использовать логические И и ИЛИ.
-
-```python
-Comment.objects.filter(q1 & q2)  # И
-Comment.objects.filter(q1 | q2)  # ИЛИ
-```
-
-### Aggregation
-
-Агрегация в джанго это по сути предвычисления.
-
-Допустим что у нас есть модели:
-
-```python
+from django.contrib.auth.models import User
 from django.db import models
 
 
-class Author(models.Model):
-    name = models.CharField(max_length=100)
-    age = models.IntegerField()
+class Note(models.Model):
+    text = models.CharField(max_length=100)
+    created_at = models.DateTimeField(auto_now=True)
+    author = models.ForeignKey(User, on_delete=models.CASCADE, related_name='notes')
 
-
-class Publisher(models.Model):
-    name = models.CharField(max_length=300)
-
-
-class Book(models.Model):
-    name = models.CharField(max_length=300)
-    pages = models.IntegerField()
-    price = models.DecimalField(max_digits=10, decimal_places=2)
-    rating = models.FloatField()
-    authors = models.ManyToManyField(Author)
-    publisher = models.ForeignKey(Publisher, on_delete=models.CASCADE)
-    pubdate = models.DateField()
-
-
-class Store(models.Model):
-    name = models.CharField(max_length=300)
-    books = models.ManyToManyField(Book)
+    class Meta:
+        ordering = ['-created_at', ]
 ```
 
-Мы можем совершить предвычисления каких либо средних, минимальных, максимальных значений, вычислить сумму итд.
+И так же не забываем перед тем как сделать миграции, добавить в настройки,
+приложение, `rest_framework`, `rest_framework.authtoken`, для авторизации.
+
+### Регистрация
+
+Для регистрации, нам необходим сериалайзер и эндпоинт.
+
+`api/serializers.py`
 
 ```python
->> > from django.db.models import Avg
->> > Book.objects.all().aggregate(Avg('price'))
-{'price__avg': 34.35}
+from django.contrib.auth.models import User
+from rest_framework import serializers
+
+
+class UserSerializer(serializers.ModelSerializer):
+    password = serializers.CharField(write_only=True)
+
+    class Meta:
+        model = User
+        fields = ('username', 'password', 'id')
+
+    def create(self, validated_data):
+        user = User.objects.create_user(
+            username=validated_data['username'],
+            password=validated_data['password']
+        )
+        return user
 ```
 
-На самом деле all() не несёт пользы в этом примере
+`resources.py`
 
 ```python
->> > Book.objects.aggregate(Avg('price'))
-{'price__avg': 34.35}
+from django.contrib.auth.models import User
+from rest_framework.generics import CreateAPIView
+from rest_framework.permissions import AllowAny
+
+from notes.api.serializers import UserSerializer
+
+
+class RegisterAPIView(CreateAPIView):
+    queryset = User.objects.all()
+    serializer_class = UserSerializer
+    permission_classes = [AllowAny, ]
 ```
 
-Значение можно именовать
+`api` - папка в которой находятся все файлы связанные с API
+
+`notes` - название приложения
+
+Добавляем url:
+
+`urls.py`
 
 ```python
->> > Book.objects.aggregate(average_price=Avg('price'))
-{'average_price': 34.35}
+from django.urls import path
+
+from notes.api.resources import RegisterAPIView
+
+urlpatterns = [
+    path('api/register/', RegisterAPIView.as_view()),
+]
+
 ```
 
-Можно вносить больше одной агрегации за раз
+### Авторизация
+
+Для авторизации мы будем использовать стандартную авторизацию по токену. Так что все что нам надо сделать, это добавить
+урл для получения токена.
+
+`urls.py`
 
 ```python
->> > from django.db.models import Avg, Max, Min
->> > Book.objects.aggregate(Avg('price'), Max('price'), Min('price'))
-{'price__avg': 34.35, 'price__max': Decimal('81.20'), 'price__min': Decimal('12.99')}
+from django.urls import path
+from rest_framework.authtoken.views import obtain_auth_token
+
+from notes.api.resources import RegisterAPIView
+
+urlpatterns = [
+    path('api/register/', RegisterAPIView.as_view()),
+    path('api/token/', obtain_auth_token)
+]
 ```
 
-Если нам нужно, что бы подсчитанное значение было у каждого объекта модели, мы используем метод `annotate`
+Но мы же хотели сделать так, что бы токен "умирал" через 10 минут?
+
+Для этого много способов, но самый простой, это написать собственную аутентификацию, основанную на базовой
+
+`settings.py`
 
 ```python
-# Build an annotated queryset
-from django.db.models import Count
+...
 
-q = Book.objects.annotate(Count('authors'))
-# Interrogate the first object in the queryset
-q[0]
-< Book: The Definitive Guide to Django >
-q[0].authors__count
-2
-# Interrogate the second object in the queryset
-q[1]
-< Book: Practical Django Projects >
-q[1].authors__count
-1
+TOKEN_EXPIRE_SECONDS = 600
+
+REST_FRAMEWORK = {
+    'DEFAULT_AUTHENTICATION_CLASSES': ("notes.api.authentication.TokenExpireAuthentication",),
+}
+
 ```
 
-Их тоже может быть больше одного
+`notes/api/authentication.py`
 
 ```python
-book = Book.objects.first()
-book.authors.count()
-2
-book.store_set.count()
-3
-q = Book.objects.annotate(Count('authors'), Count('store'))
-q[0].authors__count
-6
-q[0].store__count
-6
+from django.conf import settings
+from django.utils import timezone
+from rest_framework import exceptions
+from rest_framework.authentication import TokenAuthentication
+
+
+class TokenExpireAuthentication(TokenAuthentication):
+    def authenticate(self, request):
+        try:
+            user, token = super().authenticate(request=request)
+        except exceptions.AuthenticationFailed as e:
+            raise exceptions.AuthenticationFailed(e)
+        except TypeError:
+            return None
+        else:
+            if (timezone.now() - token.created).seconds > settings.TOKEN_EXPIRE_SECONDS:
+                token.delete()
+                raise exceptions.AuthenticationFailed("Token expired")
+            return user, token
+
 ```
 
-Все эти вещи можно комбинировать
+### Заметки. Чтение, создание, удаление
+
+Отличный пример когда мы можем либо создать свой класс и наследоваться от нужных миксинов, либо,
+ограничить `ModelViewSet`, давайте ограничим второй.
+
+Я хочу что бы при чтении я видел имя пользователя.
+
+Также мне нужно ограничить удаление чужих объектов. Возможность создания, только зарегистрированным пользователем. И
+добавление этого пользователя, напрямую из реквеста.
+
+`api/permissions.py`
 
 ```python
-highly_rated = Count('book', filter=Q(book__rating__gte=7))
-Author.objects.annotate(num_books=Count('book'), highly_rated_books=highly_rated)
+from rest_framework.permissions import BasePermission
+
+
+class DeleteOnlyOwner(BasePermission):
+
+    def has_object_permission(self, request, view, obj):
+        if request.method == "DELETE":
+            return obj.author == request.user
+        else:
+            return True
 ```
 
-C ордерингом
+`api/serializers.py`
+
+```python
+from django.contrib.auth.models import User
+from rest_framework import serializers
+
+from notes.models import Note
+
+
+class UserSerializer(serializers.ModelSerializer):
+    password = serializers.CharField(write_only=True)
+
+    class Meta:
+        model = User
+        fields = ('username', 'password', 'id')
+
+    def create(self, validated_data):
+        user = User.objects.create_user(
+            username=validated_data['username'],
+            password=validated_data['password']
+        )
+        return user
+
+
+class NoteSerializer(serializers.ModelSerializer):
+    author = serializers.ReadOnlyField(source='author.username')
+
+    class Meta:
+        model = Note
+        fields = ['id', 'text', 'created_at', 'author']
+
 
 ```
->>> Book.objects.annotate(num_authors=Count('authors')).order_by('num_authors')
+
+`api/resources.py`
+
+```python
+from django.contrib.auth.models import User
+from rest_framework import viewsets
+from rest_framework.generics import CreateAPIView
+from rest_framework.permissions import AllowAny, IsAuthenticatedOrReadOnly
+
+from notes.api.permissions import DeleteOnlyOwner
+from notes.api.serializers import UserSerializer, NoteSerializer
+from notes.models import Note
+
+
+class RegisterAPIView(CreateAPIView):
+    queryset = User.objects.all()
+    serializer_class = UserSerializer
+    permission_classes = [AllowAny,]
+
+
+class NotesViewSet(viewsets.ModelViewSet):
+    queryset = Note.objects.all()
+    http_method_names = ['get', 'post', 'delete']
+    serializer_class = NoteSerializer
+    permission_classes = [IsAuthenticatedOrReadOnly, DeleteOnlyOwner]
+
+    def perform_create(self, serializer):
+        serializer.save(author=self.request.user)
 ```
 
-## F - выражения
+`urls.py`
 
-F выражения нужны для получения значения поли, и оптимизации
-записи. [Дока](https://docs.djangoproject.com/en/3.1/ref/models/expressions/#f-expressions)
+```python
+from django.urls import path, include
+from rest_framework.authtoken.views import obtain_auth_token
 
-Допустим нам нужно увеличить определенному объекту в базе значение какого либо поля на 1
-
-```
-reporter = Reporters.objects.get(name='Tintin')
-reporter.stories_filed += 1
-reporter.save()
-```
-
-На самом деле в этот момент мы получаем значение из базы в память, обрабатываем, и записываем в базу
-
-Есть другой путь:
-
-```
-from django.db.models import F
-
-reporter = Reporters.objects.get(name='Tintin')
-reporter.stories_filed = F('stories_filed') + 1
-reporter.save()
+from notes.api.resources import RegisterAPIView, NotesViewSet
+from rest_framework import routers
+router = routers.DefaultRouter()
+router.register(r'notes', NotesViewSet)
+urlpatterns = [
+    path('api/register/', RegisterAPIView.as_view()),
+    path('api/token/', obtain_auth_token),
+    path('api/', include(router.urls)),
+]
 ```
 
-Преимущества под капотом, но давайте предположим, что нам нужно сделать эту же операцию массово
-
-```
-reporter = Reporters.objects.filter(name='Tintin')
-reporter.update(stories_filed=F('stories_filed') + 1)
-```
-
-Такие объекты можно использовать и в аннотации и в фильтрах и во многих других местах.
-
-# Практика/Домашка:
-
-Вывести все полученные результаты, на темплейты, каждый на отдельной странице и отдельным url-ом:
-
-Создать объекты нужно через shell. (Можете и через админку несколько объектов добавить, но через шел надо обязательно)
-
-Всё выполнять со своими моделями.
-
-1. Получить 5 последних написанных комментариев (именно текст).
-
-2. Создать 5 комментариев с разным текстом, Хотя бы один должен начинаться со слова "Start", хоть один в середине должен
-   иметь слово "Middle", хоть один должен заканчиваться словом "Finish".
-
-3. Переписать сейв комментария так, что бы при создании дата менялась бы на год назад (если сегодня 20 декабря 2021,
-   должна выставляться 20 декабря 2020), изменение комментариев не затрагивать.
-
-4. Изменить комментарии со словами "Start", "Middle", "Finish".
-
-5. Удалить все комментарии у которых в тексте есть буква "k", но не удалять если есть буква "с".
-
-6. Получить первые 2 комментария по дате создания к статье у которой имя автора последнее по алфавиту.
-
-
+Все, можно проверять, весь функционал готов!

@@ -1,849 +1,1140 @@
-# Урок 38. @api_view, APIView, ViewSets, Pagination, Routers
+# Лекция 38. Методологии разработки. Git flow. CI/CD. Монолит и микросервисы. Docker
 
-Все мы помним, что веб это в первую очередь Request-Response система.
+В этой лекции поговорим о том, как разработка происходит в реальности. Как разработчики взаимодействуют между собой,
+какие еще роли бывают в команде и зачем они нужны. Как чаще всего используется git. И как при правильном подходе можно
+автоматизировать все процессы деплоймента.
 
-## Request
+В достаточно крупных компаниях процессами автоматизации занимаются отдельные специалисты, называются DevOps (Development
+and Operation) или даже DevSecOps (Development, Security and Operations). Но в небольших компаниях этим занимаются сами
+разработчики, поэтому я считаю, что нам необходимо понимать как это устроено.
 
-Что нового в реквесте.
+## Методологии разработки
 
-Дока [тут](https://www.django-rest-framework.org/api-guide/requests/)
+**Методология разработки ПО** – это процесс описания того, как определенный продукт будет разрабатываться, то есть один 
+из способов организации коллективной разработки. Существует множество разных моделей такого процесса, каждая из которых
+описывает свой подход. Нельзя сказать, что среди них выделяется одна, которую нужно использовать в каждом проекте, всё
+сугубо ситуативно.
 
-Два новых парамера `.data` и `.query_string`
+По сути, это правила и обязанности сотрудников при разработке программного обеспечения, и какие вообще нужны специалисты.
 
-`.data` - данные есть запрос POST, PUT или PATCH, аналог `request.POST` или `request.FILES`
+На самом деле, их довольно много, я знаю как минимум 7, но в реальности в современном мире я сталкивался только с 3-я,
+и то `scrum` очень сильно впереди по количеству команд, которые его используют. Давайте разбираться.
 
-`.query_string` - данные если запрос GET, аналог `request.GET`
+Предлагаю рассмотреть подробнее.
 
-И параметры `.auth` и `.authenticate` которые мы рассмотрим на следующей лекции. Она целиком про авторизацию и
-пермишены (доступы).
+### Waterfall
 
-## Response
+Вотерфол, он же водопад.
 
-Дока [тут](https://www.django-rest-framework.org/api-guide/responses/)
+**Waterfall** (каскадная, водопадная) – одна из самых старых методологий и подразумевает строгое последовательное 
+выполнение всех этапов, каждый из которых должен завершиться перед началом следующего. То есть переход на следующий этап
+означает полное завершение работ на предыдущем. На картинке показано, что сначала мы анализируем задачу (документируем 
+задания, обговариваем сложности), потом происходит дизайн (на этом этапе формируется структура проекта), дальше кодинг и
+тестирование. Возвраты на следующие этапы не предусмотрены. Использовать такую систему рекомендуется в небольших
+проектах, где известны заранее требования и мала вероятность, что они будут меняться.
 
-В отличие от классической Django, респонсом в рест системе, будет обычный HTTP респонс содержащий набор данных, чаще
-всего JSON (но бывает и нет).
+![](https://cdn.javarush.ru/images/article/c86b527c-ff58-4b9d-b625-00e2c6f1b1cd/512.webp)
 
-Классическая Джанго тоже может возвращать HTTP респонс и быть обработчиком рест архитектуры, но существующий пекедж
-сильно упрощает эти процессы.
+Если мы предположим, что мы разрабатываем автомобиль, чтобы сделать это по вотерфолу, то нужно дать чёткую задачу
+команде проектирования, когда вся документальная работа будет закончена, нужно прейти к этапу дизайна и проработке
+автомобиля, потом собрать прототип, после чего провести тестирование.
 
-Для обработки такого респонса, есть специальный объект.
+Преимущества:
 
-```Response(data, status=None, template_name=None, headers=None, content_type=None)```
+- Полная и согласованная документация на каждом этапе;
+- Простота использования;
+- Стабильные требования.
+- Бюджет и дедлайны заранее определены
 
-Где `data` это данные,
+Недостатки:
 
-`status` - код ответа (200, 404, 503),
+- Большое количество документации;
+- Не очень гибкая система;
+- Нет возможности вернуться на шаг назад.
 
-`template_name` - возможность указать темплейт, если необходимо вернуть страницу, а не просто набор данных,
+### Kanban
 
-`headers` и `content_type` - хедеры и контент тайп запроса
+**Канбан** – система, построенная на визуализации процесса выполнения задач команды. Основная идея в этой системе 
+уменьшать количество задач, выполняющихся в данный момент (в колонке *in progress*). В канбане на первом месте задачи. 
+Хорош для проектов, которые в стадии поддержки, где основной функционал уже разработан и остались минимальные доработки 
+и багофиксинг.
 
-## Настройка для получения JSON
+В канбане задачи сдаются индивидуально. Задача независимо от других задач проходит по всем этапам на доске, и как только
+она выполнена, её можно показать заказчику.
 
-В современной версии пекеджа DRF, по умолчанию не указан параметр для получения ответа в формате JSON. Это нужно указать
-явно, для этого в `settings.py` необходимо добавить:
+Канбан доска состоит из колонок, каждая из которых - это отдельный процесс разработки. На некоторые столбцы (например, 
+*in progress*) вводят ограничения по количеству тасок, которые там могут находиться. Это помогает легко и быстро 
+находить проблемные места в распределении задач. На картинке пример самой просто такой доски. Количество колонок и 
+названия могут меняться, назову самые распространенные:
 
-```python
-REST_FRAMEWORK = {
-    'DEFAULT_RENDERER_CLASSES': (
-        'rest_framework.renderers.JSONRenderer',
-    )
-}
-```
+![](https://cdn.javarush.ru/images/article/372fcb1e-ddbf-40dd-ad32-113572225d3e/512.webp)
 
-## @api_view
-
-Дока [тут](https://www.django-rest-framework.org/api-guide/views/#api_view)
-
-Для описания эндпоинта функционально нужно указать декоратор api_view и методы которые он может принимать. Возвращает
-всё так же объект респонса.
-
-```python
-from rest_framework import status
-from rest_framework.decorators import api_view
-from rest_framework.response import Response
-from snippets.models import Snippet
-from snippets.serializers import SnippetSerializer
-
-
-@api_view(['GET', 'POST'])
-def snippet_list(request):
-    """
-    List all code snippets, or create a new snippet.
-    """
-    if request.method == 'GET':
-        snippets = Snippet.objects.all()
-        serializer = SnippetSerializer(snippets, many=True)
-        return Response(serializer.data)
-
-    elif request.method == 'POST':
-        serializer = SnippetSerializer(data=request.data)
-        if serializer.is_valid():
-            serializer.save()
-            return Response(serializer.data, status=status.HTTP_201_CREATED)
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-```
-
-Обратите внимание в пакете рест фреймворка сразу есть заготовленные объекты статуса для ответа
-
-Если попытаться получить доступ методом который не разрешен, запрос будет отклонён с ответом 405 method not allowed
-
-Для передачи параметров используются аргументы функции. (Очень похоже на обычную джанго вью)
-
-```python
-@api_view(['GET', 'PUT', 'DELETE'])
-def snippet_detail(request, pk):
-    """
-    Retrieve, update or delete a code snippet.
-    """
-    try:
-        snippet = Snippet.objects.get(pk=pk)
-    except Snippet.DoesNotExist:
-        return Response(status=status.HTTP_404_NOT_FOUND)
-
-    if request.method == 'GET':
-        serializer = SnippetSerializer(snippet)
-        return Response(serializer.data)
-
-    elif request.method == 'PUT':
-        serializer = SnippetSerializer(snippet, data=request.data)
-        if serializer.is_valid():
-            serializer.save()
-            return Response(serializer.data)
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
-    elif request.method == 'DELETE':
-        snippet.delete()
-        return Response(status=status.HTTP_204_NO_CONTENT)
-```
-
-Урлы для таких методов описываются точно так же как и для стандартной джанго вью
-
-```python
-from snippets.view import snippet_list, snippet_detail
-
-urlpatterns = [
-    path('snippets/', snippet_list),
-    path('snippets/<int:pk>/', snippet_detail),
-]
-```
-
-Ответ на гет запрос в этому случае будет выглядеть так:
-
-```json
-[
-  {
-    "id": 1,
-    "title": "",
-    "code": "foo = \"bar\"\n",
-    "linenos": false,
-    "language": "python",
-    "style": "friendly"
-  },
-  {
-    "id": 2,
-    "title": "",
-    "code": "print(\"hello, world\")\n",
-    "linenos": false,
-    "language": "python",
-    "style": "friendly"
-  }
-]
-```
-
-Поля будут зависеть от модели и сериалайзера соответсвенно.
-
-Ответ на пост запрос (создание объекта):
-
-```json
-http --form POST http://127.0.0.1:8000/snippets/ code="print(123)"
-
-{
-"id": 3,
-"title": "",
-"code": "print(123)",
-"linenos": false,
-"language": "python",
-"style": "friendly"
-}
-```
-
-## View
-
-Знакомимся с самым подробным сайтом по ДРФ классам [тут](http://www.cdrf.co/)
-
-## APIView
-
-Дока [тут](https://www.django-rest-framework.org/api-guide/views/#class-based-views)
-
-Так же мы можем описать это же через Class Base View, для этого нам нужно наследоваться от APIView
-
-```python
-from snippets.models import Snippet
-from snippets.serializers import SnippetSerializer
-from rest_framework.views import APIView
-from rest_framework.response import Response
-from rest_framework import status
-
-
-class SnippetList(APIView):
-    """
-    List all snippets, or create a new snippet.
-    """
-
-    def get(self, request, format=None):
-        snippets = Snippet.objects.all()
-        serializer = SnippetSerializer(snippets, many=True)
-        return Response(serializer.data)
-
-    def post(self, request, format=None):
-        serializer = SnippetSerializer(data=request.data)
-        if serializer.is_valid():
-            serializer.save()
-            return Response(serializer.data, status=status.HTTP_201_CREATED)
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-```
-
-Вынесем получение объекта в отдельный метод:
-
-```python
-class SnippetDetail(APIView):
-    """
-    Retrieve, update or delete a snippet instance.
-    """
-
-    def get_object(self, pk):
-        try:
-            return Snippet.objects.get(pk=pk)
-        except Snippet.DoesNotExist:
-            raise Http404
-
-    def get(self, request, pk, format=None):
-        snippet = self.get_object(pk)
-        serializer = SnippetSerializer(snippet)
-        return Response(serializer.data)
-
-    def put(self, request, pk, format=None):
-        snippet = self.get_object(pk)
-        serializer = SnippetSerializer(snippet, data=request.data)
-        if serializer.is_valid():
-            serializer.save()
-            return Response(serializer.data)
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
-    def delete(self, request, pk, format=None):
-        snippet = self.get_object(pk)
-        snippet.delete()
-        return Response(status=status.HTTP_204_NO_CONTENT)
-```
-
-Урлы описываются так же как и для джанго Class Base View:
-
-```python
-urlpatterns = [
-    path('snippets/', SnippetList.as_view()),
-    path('snippets/<int:pk>/', SnippetDetail.as_view()),
-]
-```
-
-## GenericView
-
-По аналогии с классической Django, существуют заранее описанные CRUD действия.
-
-Как это работает.
-
-Существует класс `GenericAPIView` который наследуется от обычного `APIView`
-
-В нём описаны такие поля как:
-
-- `queryset`, хранит кверисет
-
-- `serializer_class`, хранит сериалайзер
-
-- `lookup_field = 'pk'`, название атрибута в модели который будет отвечать за PK,
-
-- `lookup_url_kwarg = None`, название атрибута в запросе который будет отвечать за `pk`
-
-- `filter_backends = api_settings.DEFAULT_FILTER_BACKENDS`, - фильтры запросов
-
-- `pagination_class = api_settings.DEFAULT_PAGINATION_CLASS`, - пагинация запросов
-
-И методы:
-
-- `get_queryset` - получение кверисета,
-
-- `get_object` - получение одного объекта,
-
-- `get_serializer` - получение объекта сериалайзера,
-
-- `get_serializer_class` - получение класса сериалайзера,
-
-- `get_serializer_context` - получить контекст сериалайзера,
-
-- `filter_queryset` - отфильтровать кверисет,
-
-- `paginator` - объект пагинации,
-
-- `paginate_queryset` - пагинировать кверисет,
-
-- `get_paginated_response` - получить пагинированый ответ.
-
-*Такой класс не работает самостоятельно, только вместе с определёнными миксинами*
-
-### Миксины
-
-В DRF существует 5 миксинов:
-
-```python
-class CreateModelMixin(object):
-    """
-    Create a model instance.
-    """
-
-    def create(self, request, *args, **kwargs):
-        serializer = self.get_serializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-        self.perform_create(serializer)
-        headers = self.get_success_headers(serializer.data)
-        return Response(serializer.data, status=status.HTTP_201_CREATED, headers=headers)
-
-    def perform_create(self, serializer):
-        serializer.save()
-
-    def get_success_headers(self, data):
-        try:
-            return {'Location': str(data[api_settings.URL_FIELD_NAME])}
-        except (TypeError, KeyError):
-            return {}
-```
-
-Рассмотрим подробнее,
-
-Это миксин, и без сторонних классов этот функционал работать не будет.
-
-При вызове метода `create` мы предполагаем, что у нас был реквест.
-
-Вызываем метод get_serializer() из класса GenericAPIView, для получения объекта сериалайзера, обратите внимание, что
-данные передаются через аттрибут `data` так как, они получены от пользователя. Проверяем данные на валидность (обратите
-внимание на атрибут raise_exception, если данные будут не валидны, код сразу вылетит в трейсбек, а значит нам не нужно
-отдельно прописывать действия при не валидном сериалайзере), вызываем метод `perform_create` который просто сохраняет
-сериалайзер(вызывает `create` или `update` в зависимости от данных), получает хедеры, и возвращает респонс с 201 кодом,
-создание успешно.
-
-По аналогии, мы можем рассмотреть остальные миксины.
-
-```python
-class RetrieveModelMixin(object):
-    """
-    Retrieve a model instance.
-    """
-
-    def retrieve(self, request, *args, **kwargs):
-        instance = self.get_object()
-        serializer = self.get_serializer(instance)
-        return Response(serializer.data)
-```
-
-Обратите внимание метод называется `retrieve` и внутри вызывает метод `get_object()` это миксин одиночного объекта
-
-```python
-class UpdateModelMixin(object):
-    """
-    Update a model instance.
-    """
-
-    def update(self, request, *args, **kwargs):
-        partial = kwargs.pop('partial', False)
-        instance = self.get_object()
-        serializer = self.get_serializer(instance, data=request.data, partial=partial)
-        serializer.is_valid(raise_exception=True)
-        self.perform_update(serializer)
-
-        if getattr(instance, '_prefetched_objects_cache', None):
-            # If 'prefetch_related' has been applied to a queryset, we need to
-            # forcibly invalidate the prefetch cache on the instance.
-            instance._prefetched_objects_cache = {}
-
-        return Response(serializer.data)
-
-    def perform_update(self, serializer):
-        serializer.save()
-
-    def partial_update(self, request, *args, **kwargs):
-        kwargs['partial'] = True
-        return self.update(request, *args, **kwargs)
-```
-
-Методы `update`, `partial_update`, `perform_update` нужны для обновления объекта, обратите внимание на атрибут `partial`
-помните разницу между PUT и PATCH?
-
-```python
-class DestroyModelMixin(object):
-    """
-    Destroy a model instance.
-    """
-
-    def destroy(self, request, *args, **kwargs):
-        instance = self.get_object()
-        self.perform_destroy(instance)
-        return Response(status=status.HTTP_204_NO_CONTENT)
-
-    def perform_destroy(self, instance):
-        instance.delete()
-```
-
-Аналогично для удаления, методы `destroy` `perform_destroy`
-
-```python
-class ListModelMixin(object):
-    """
-    List a queryset.
-    """
-
-    def list(self, request, *args, **kwargs):
-        queryset = self.filter_queryset(self.get_queryset())
-
-        page = self.paginate_queryset(queryset)
-        if page is not None:
-            serializer = self.get_serializer(page, many=True)
-            return self.get_paginated_response(serializer.data)
-
-        serializer = self.get_serializer(queryset, many=True)
-        return Response(serializer.data)
-```
-
-Метод `list` получает кверисет, дальше пытается его пагинировать, если получается, возвращает страницу, если нет целый
-ответ.
-
-*Важно!* Ни в одном из миксинов не было методов `get`,`post`,`patch`,`put` или `delete`, почему?
-
-Потому что их вызов перенесен в еще одни дополнительные классы
-
-### Generic классы
-
-Вот так выглядят классы которые уже можно использовать. Как это работает? Эти классы наследуют логику работы с данными
-из необходимого миксина, общие методы которые актуальны для любого CRUD действия из `GenericAPIView` дальше описываем
-методы тех видов запросов которые мы хотим обрабатывать, в которых просто вызываем необходимый метод из миксина.
-
-**Переписываются методы `create`, `destroy` итд, а не `get`, `post`!**
-
-```python
-class CreateAPIView(mixins.CreateModelMixin,
-                    GenericAPIView):
-    """
-    Concrete view for creating a model instance.
-    """
-
-    def post(self, request, *args, **kwargs):
-        return self.create(request, *args, **kwargs)
-
-```
-
-```python
-class ListAPIView(mixins.ListModelMixin,
-                  GenericAPIView):
-    """
-    Concrete view for listing a queryset.
-    """
-
-    def get(self, request, *args, **kwargs):
-        return self.list(request, *args, **kwargs)
-```
-
-```python
-class RetrieveAPIView(mixins.RetrieveModelMixin,
-                      GenericAPIView):
-    """
-    Concrete view for retrieving a model instance.
-    """
-
-    def get(self, request, *args, **kwargs):
-        return self.retrieve(request, *args, **kwargs)
-```
-
-```python
-class DestroyAPIView(mixins.DestroyModelMixin,
-                     GenericAPIView):
-    """
-    Concrete view for deleting a model instance.
-    """
-
-    def delete(self, request, *args, **kwargs):
-        return self.destroy(request, *args, **kwargs)
-```
-
-```python
-class UpdateAPIView(mixins.UpdateModelMixin,
-                    GenericAPIView):
-    """
-    Concrete view for updating a model instance.
-    """
-
-    def put(self, request, *args, **kwargs):
-        return self.update(request, *args, **kwargs)
-
-    def patch(self, request, *args, **kwargs):
-        return self.partial_update(request, *args, **kwargs)
-```
-
-```python
-class ListCreateAPIView(mixins.ListModelMixin,
-                        mixins.CreateModelMixin,
-                        GenericAPIView):
-    """
-    Concrete view for listing a queryset or creating a model instance.
-    """
-
-    def get(self, request, *args, **kwargs):
-        return self.list(request, *args, **kwargs)
-
-    def post(self, request, *args, **kwargs):
-        return self.create(request, *args, **kwargs)
-```
-
-```python
-class RetrieveUpdateAPIView(mixins.RetrieveModelMixin,
-                            mixins.UpdateModelMixin,
-                            GenericAPIView):
-    """
-    Concrete view for retrieving, updating a model instance.
-    """
-
-    def get(self, request, *args, **kwargs):
-        return self.retrieve(request, *args, **kwargs)
-
-    def put(self, request, *args, **kwargs):
-        return self.update(request, *args, **kwargs)
-
-    def patch(self, request, *args, **kwargs):
-        return self.partial_update(request, *args, **kwargs)
-```
-
-```python
-class RetrieveDestroyAPIView(mixins.RetrieveModelMixin,
-                             mixins.DestroyModelMixin,
-                             GenericAPIView):
-    """
-    Concrete view for retrieving or deleting a model instance.
-    """
-
-    def get(self, request, *args, **kwargs):
-        return self.retrieve(request, *args, **kwargs)
-
-    def delete(self, request, *args, **kwargs):
-        return self.destroy(request, *args, **kwargs)
-```
-
-```python
-class RetrieveUpdateDestroyAPIView(mixins.RetrieveModelMixin,
-                                   mixins.UpdateModelMixin,
-                                   mixins.DestroyModelMixin,
-                                   GenericAPIView):
-    """
-    Concrete view for retrieving, updating or deleting a model instance.
-    """
-
-    def get(self, request, *args, **kwargs):
-        return self.retrieve(request, *args, **kwargs)
-
-    def put(self, request, *args, **kwargs):
-        return self.update(request, *args, **kwargs)
-
-    def patch(self, request, *args, **kwargs):
-        return self.partial_update(request, *args, **kwargs)
-
-    def delete(self, request, *args, **kwargs):
-        return self.destroy(request, *args, **kwargs)
-```
-
-Допустим мы хотим описать класс при GET запросе получение списка комментариев в которых есть буква `w`, если у нас уже
-есть сериалайзер и модель, а при POST создание комментария.
-
-```python
-class CommentListView(ListCreateAPIView):
-    queryset = Comment.objects.all()
-    serializer_class = CommentSerializer
-
-    def get_queryset(self):
-        return super().get_queryset().filter(text__icontains='w')
-```
-
-Всё, этого достаточно.
-
-## ViewSet
-
-Дока [тут](https://www.django-rest-framework.org/api-guide/viewsets/)
-
-Классы, которые отвечают за поведение нескольких запросов, и отличаются друг от друга только методом, называются
-ViewSet.
-
-Они на самом деле описывают методы, для получения списка действий (list, retrieve, итд), и преобразования их в урлы (об
-этом дальше).
+На самом деле, колонок может быть какое угодно количество, и они могут быть самыми разнообразными.
 
 Например:
 
+- *To do* – список задач, которые надо сделать
+- *In progress* – задачи над которыми ведется работа в данный момент
+- *Code review* – задачи, которые сделаны и отправлены на ревью
+- *In testing* – задачи, готовые к тестированию
+- *Done* – сделанные задачи.
+
+Преимущества:
+
+- Простота использования.
+- Наглядность (помогает в нахождении узких мест, упрощает понимание)
+- Высокая вовлеченность команды в сам процесс.
+- Высокая гибкость в разработке.
+
+Недостатки:
+
+- Нестабильный список задач.
+- Сложно применять на долгосрочных проектах.
+- Отсутствие жестких дедлайнов.
+
+В случае с разработкой автомобиля это бы означало, что мы имели бы кучу разбитых задач, например, спроектировать колесо,
+продумать трансмиссию и т. д. И ответственные за это люди. В реальности встречал только на саппорт проектах. Это такие, 
+где всё давно работает и необходимо только поддерживать или вносить небольшие правки. Но канбан доска очень и очень 
+часто используется как инструмент внутри процесса `scrum`, о нём и поговорим.
+
+### Scrum
+
+О нём сильно детальнее.
+
+На самом деле, **Scrum** - это лишь подвид методологии, которая называется **Agile**.
+
+Суть Agile заключается в его дословном переводе: Agile - гибкий. Смысл заключается в том, чтобы сконцентрироваться на
+результате, при этом имея возможность гибкого управления и правок в процессе разработки.
+
+Как его вообще придумали? Вернёмся на сто лет назад и к примеру со сборкой автомобиля. Мы - Генри Форд и хотим первыми
+собрать массовый, серийный автомобиль. Допустим мы потратили 2 года и 2 миллиона долларов на проектную документацию,
+потом 3 года и 4 миллиона на чертежи, потом 2 миллиона и 1 год на сборку
+прототипа и собираемся перейти к тестированию. И на этапе тестирования в первый день мы выясняем, что в документации
+были допущены ошибки при вычислениях, и наш автомобиль переворачивается на каждом повороте.
+
+Вывод, мы потратили 6 лет и 8 миллионов на работу, которую надо начинать сначала, потому что документацию нужно начинать
+сначала, и мы понятия не имеем как изменения, связанные с поворотами, повлияют на остальную систему.
+
+Такой подход никого не устраивал, и был придуман Agile. Суть Agile - ввести временные циклы разработки, в конце которых 
+всегда получается како-то результат. Например, мы вводим цикл в 3 месяца, и каждые 3 месяца
+смотрим на результаты. Например, у нас уже есть мотор, и мы хотим убедиться, что он сможет крутить колёса, и собираем
+только мотор, колёса и все связующие их детали, если в конце такого цикла всё хорошо, то идём дальше, если нет - ищем
+ошибку, но мы потеряли всего 3 месяца, а не 6 лет. Если проблема обнаружилась на более поздних этапах, мы всегда можем
+вернуться к результатам такого цикла и посмотреть лишь то, что было разработано на этом этапе.
+
+Такие циклы разработки называются спринтами.
+
+![](https://preview.redd.it/m3zuewzit0z81.png?width=960&crop=smart&auto=webp&s=acb2ac666c10ecebc786ef793d17462cb43cd895)
+
+В итоге мы получаем более долгий процесс, потому что мы в любой момент можем изменить цели или детали текущей работы, но
+при этом очень сильно уменьшаем бюджет из-за сведения глобальных ошибок к нулю. Практика последних 100 лет показала,
+что этот подход практически всегда выходит сильно дешевле, если вы создаёте что угодно, сложнее гвоздя.
+
+Из личной практики, клиент почти никогда не знает, что он хочет, есть только примерное понимание того, как всё должно 
+быть в конце.
+
+Если в одно предложение, то суть сводится к фразе, начинали делать автомобиль, в процессе создали вертолёт, а сейчас
+переделываем его в подводную лодку, но клиент счастлив и платит, потому что именно она ему оказалась и нужна.
+
+![](https://codetiburon.com/app/uploads/2017/02/what-is-the-difference-between-agile-and-waterfall-model.png)
+
+### Роли в SCRUM команде
+
+В рамках SCRUM существует три основные роли:
+
+- *Product Owner (PO)* - заказчик, чаще всего это специально назначенный менеджер, который занимается постановкой задач и
+  сбором требований от так называемых stakeholders, в случае больших компаний почти никогда не бывает одного
+  выгодоприобретателя, и важно, чтобы задачи ставил только один человек.
+- *Developer Team Member* - это вы. И не только вы, это любые люди, которые участвуют в процессе разработки, тестировщики,
+  дизайнеры, бизнес аналитики и т. д. Их роль работать работу.
+- *Scrum Master (SM)* - это еще один менеджер. Его задача - это защита команды и отслеживания соблюдения SCRUM процессов, о
+  них дальше. Зачем защищать команду? Потому что Product Owner всегда заинтересован в том, чтобы команда выдавала 
+  максимальный результат, несмотря ни на что. В такой ситуации, если бы не было SCRUM мастера, то Product Owner был бы 
+  только рад дать задач столько, чтобы они занимали 24/7, одна из основных задач SM - следить, чтобы так не было.
+
+### Процессы и термины
+
+Что нужно сделать, чтобы организовать такой процесс. В первую очередь необходимо определить удобный для вас размер
+спринта, считается что он должен быть от 1 до 4 недель. Я в реальности за исключением одного проекта работал с двух
+недельными спринтами, в том исключении было 3 недели. Это размер определяют все вместе (Dev Team + PO + SM)
+
+![](https://www.codeguru.com/wp-content/uploads/2021/07/Scrum-framework.png)
+
+Следующий этап - это заполнение беклога продукта.
+
+*Backlog (беклог)* - это место, где будут лежать ваши задачи, чаще всего это разные специализированные сервисы, очень 
+часто это Jira или Azure Devops, но на самом деле их существует очень и очень много.
+
+Беклог продукта заполняет Product Owner, чем детальнее описана задача, тем проще потом её выполнять, поэтому следить за
+детализацией беклога - это задача SCRUM мастера и бизнес аналитиков, если они есть. Бизнес аналитик - это чаще всего
+переводчик с языка заказчика на технический и наоборот, очень полезные ребята.
+
+В идеальном мире, в беклоге продукта должно быть задач не меньше чем на 2 спринта.
+
+После чего начинается процесс планирования спринта, обычно этим занимается дев команда, как именно это происходит,
+обсудим дальше, пока общая идея.
+
+Результатом планирования является беклог спринта, то есть список выбранных задач на следующий цикл разработки.
+
+Когда беклог спринта готов, начинается процесс разработки.
+
+Важным элементом разработки является ежедневный митинг всей командой. Такой митинг может называться по-разному: `daily`,
+`scrum`, `stand up` и т. д. Могут быть сочетания этих слов.
+
+Зачем он нужен?
+
+На таком митинге каждый участник команды отвечает на 3 самых главных вопроса:
+
+- Что сделал?
+- Что собираешься делать?
+- Нет ли блокирующих обстоятельств?
+
+Зачем на них отвечать, надеюсь, пояснять не надо.
+
+В конце спринта результатом чаще всего является деплой результата, иногда просто демонстрация результатов Product
+Owner. Такой митинг называется `review`.
+
+После ревью обязательно проходит ретроспектива. Это еще один митинг, который нужен для улучшения SCRUM процессов.
+
+![](https://i.ytimg.com/vi/RD60Js82D7Q/maxresdefault.jpg)
+
+Что это такое? Это митинг, на котором необходимо нарисовать на доске три колонки:
+
+- Плюсы спринта
+- Минусы спринта
+- Действия
+
+Первые два заполняются участниками команды. Каждый озвучивает плюсы и минусы, которые он увидел.
+
+Если за плюсы обычно просто хвалят, то минусы нужно разбирать.
+
+Например, плюс, что тестировщики очень хорошо сработали и вовремя нашли критичный баг, молодцы.
+
+А минус, что у проекта нет документации, допустим, с логинами и паролями от серверов, а они нужны.
+
+На каждый минус прописывается действие, в моём примере - это будет, создать файл с паролями.
+
+Дальше каждый участник команды имеет какое-то количество голосов, там где я работал, это чаще всего было 2. Голоса 
+можно отдать за те действия, которые для тебя наиболее критичны, несколько самых проголосованных берутся в работу и
+назначаются ответственные. Следующая ретроспектива начинается с обсуждения прошлых задач и результатов.
+
+Если SCRUM построен нормально, то на первых спринтах действий очень много, но чем дальше заходит процесс, тем их меньше,
+и тем больше заполняются плюсы и уходят минусы.
+
+Необходимо для того, чтобы помочь самой команде в её процессах.
+
+Итого обязательные митинги:
+
+- Planning
+- Daily Meeting
+- Review
+- Retrospective
+
+После этого начинаем с начала, с планирования спринта. И так до пенсии.
+
+![](https://habrastorage.org/r/w1560/getpro/habr/post_images/81c/22f/a3b/81c22fa3b8cc923b6bf5181cdc5ea2b3.jpg)
+
+Мем исключительно шутки ради, на самом деле хорошая методология :)
+
+### Процесс планирования и story points
+
+Процесс планирования спринта не так прост, как кажется. Какая возникает проблема? Как понять, какое количество и каких 
+задач команда вообще может сделать?
+
+Чтобы определить это, вводится специальное понятие, `story points`. Стори поинты - это условная сложность задачи, 
+которая не зависит ни от ваших навыков, ни от размера команды. Чтобы понять суть, нужно задать себе вопрос, что проще 
+почистить: банан, папайю или мандарин? Скорее всего, вне зависимости от своих навыков и размера команды вы сможете 
+сказать, что проще, а что сложнее.
+
+Как эта сложность определяется? Обычно при помощи SCRUM покера.
+
+#### SCRUM покер
+
+Если процесс проходит офлайн, то каждому участнику команды выдают карточки с цифрами и символами:
+
 ```python
-from django.contrib.auth.models import User
-from django.shortcuts import get_object_or_404
-from myapps.serializers import UserSerializer
-from rest_framework import viewsets
-from rest_framework.response import Response
-
-
-class UserViewSet(viewsets.ViewSet):
-    """
-    A simple ViewSet for listing or retrieving users.
-    """
-
-    def list(self, request):
-        queryset = User.objects.all()
-        serializer = UserSerializer(queryset, many=True)
-        return Response(serializer.data)
-
-    def retrieve(self, request, pk=None):
-        queryset = User.objects.all()
-        user = get_object_or_404(queryset, pk=pk)
-        serializer = UserSerializer(user)
-        return Response(serializer.data)
+[1, 2, 3, 5, 8, 13, 20, 40, 100, 'Чашка кофе', 'Бесконечность']
 ```
 
-Разные действия при наличии и отсутствии PK, при GET запросе.
+![](https://training.qatestlab.com/wp-content/uploads/2018/07/HEAD_Planning_Poker-1.jpg)
 
-Для описания урлов можно использовать разное описание:
+Могут быть варианты, но суть всегда одна.
 
-```python
-user_list = UserViewSet.as_view({'get': 'list'})
-user_detail = UserViewSet.as_view({'get': 'retrieve'})
+Берём задачу из беклога, обсуждаем и после обсуждения все одновременно переворачивают карту, которую считают
+правильной.
+
+Если ты не понимаешь сути задачи, например, задача по дизайну, а ты бекэнд разработчик, или наоборот, то выбрасываешь
+карту с кофе, как символ, что ты не участвуешь в обсуждении этой задачи.
+
+И бесконечность или символ `?` в случае если ты считаешь, что эту задачу вообще невозможно сделать или нам не хватает
+деталей для её оценки.
+
+Если нет сильно большого разброса, то значение выбирается большинством, например 1 человек кинул 2, 3 человека 3 и еще
+один 5, то просто возьмут 3.
+
+А если кто-то кидает сильно меньше или сильно больше начинается обсуждение и повторное голосование, возможно, этот 
+кто-то знает простой способ решения или наоборот видит какой-то подводный камень.
+
+Каждой задаче проставляется сложность. Обычно сложность выше чем 20, и даже 13 считается слишком высокой, а значит
+задачу нужно разбить на более мелкие, которые будут оценены не выше чем в 8. Хотя бывают и исключения.
+
+#### Planning and velocity
+
+Когда идёт первый спринт, ни вы, ни Product Owner, ни Scrum Master не знают, сколько задач вы можете выполнить, 
+поэтому берётся то количество задач, которые вы считаете, что вы можете сделать.
+
+![](https://memepedia.ru/wp-content/uploads/2022/05/mne-pohuj-ja-tak-chuvstvuju-tinkov.jpg)
+
+Сумма всех стори поинтов, которые вы набрали в спринт называется `velocity`. И по результатам первого спринта становится
+понятно, вы взяли много, мало или как раз, что и можно обсудить на ретроспективе.
+
+Первые несколько спринтов цифра может очень сильно меняться от спринта к спринту, но через 3-4 спринта становится
+понятно, какая velocity у вашей команды.
+
+И основываясь на этой цифре, Product Owner и Scrum Master могут понимать, какое реальное количество работы, за какое 
+время сможет сделать именно эта команда.
+
+В идеальном мире ваша velocity должна расти, но это очень индивидуально.
+
+#### Диаграммы сгорания
+
+Важным элементом является диаграмма сгорания задач в спринте.
+
+Задачи в SCRUM также попадают на доску задач, где у статусов может быть разный вес.
+
+Например:
+
+- *Нужно сделать* - 0 баллов
+- *В процессе* - 1 балл
+- *На тестировании* - 2 балла
+- *На проверке у Product Owner* - 3 балла
+- *Готово* - 4 балла
+
+И благодаря этим цифрам можно построить график того, как именно меняется процесс выполнения спринта в реальном времени.
+
+Выглядит примерно так:
+
+![](https://upload.wikimedia.org/wikipedia/commons/0/05/SampleBurndownChart.png)
+
+Естественно, чем вы ближе к идеальной прямой тем лучше. И такая диаграмма может помочь менеджерам следить за процессом
+выполнения, а вам - понять, есть ли у вас проблемы.
+
+Доступ к такой диаграмме должен быть у всех участников команды.
+
+Такая же диаграмма может быть построена для всего проекта, но на практике почти никогда не делается, потому что никто не
+знает, сколько раз изменятся или добавятся требования.
+
+### Недостатки SCRUM
+
+- Сложно оценить трудозатраты и стоимость, требуемые на разработку
+- Сложно определить самые узкие места до начала разработки.
+- Необходимость вовлечения каждого в разработку других членов команды.
+
+Финал проекта может быть очень сильно сдвинут от планов заказчика по всем уже озвученным причинам
+
+В начале проекта очень много случайных факторов. Неправильная оценка сил, неналаженные процессы, нет чёткого понимания,
+как решать блокеры.
+
+SCRUM подразумевает, что практически каждый может заменить другого в команде, на практике это всегда не так, даже в
+рамках разработки, джун почти никогда не заменит синьора, что уже говорить о том, чтобы дев выполнял задачи за
+дизайнера. Так что сложно равномерно распределить задачи, пока процесс не "встанет на рельсы".
+
+## GIT FLOW
+
+Когда дело доходит до работы, возникает очень важный вопрос. Как будем использовать GIT?
+
+На самом деле, это очень сложный вопрос. И на него нет правильного ответа.
+
+Но если мы живём в идеальном мире, где у нас небольшая команда, есть профильные девопсы, мы используем только один
+репозиторий, и релизы у нас выходят только раз в конце спринта, то в 2010 году за нас придумали правильный ответ.
+
+Ответ называется `git flow`. И несмотря на все описанные выше "или" и количество статей с матом на этот подход, я еще
+никогда не видел структуры, которая работала бы лучше при нормальных условиях.
+
+![](http://risovach.ru/upload/2015/05/mem/no-ya-zhe_82347844_orig_.png)
+
+Что же это такое?
+
+Если одной страшной картинкой, то вот:
+
+![](https://habrastorage.org/r/w1560/webt/oj/ir/hp/ojirhpa9ozvcpsejgei2azb0vo0.png)
+
+Давайте разбираться.
+
+При таком подходе нам необходимо две long-term ветки. То есть те, которые будут жить долго.
+
+Это будут ветки `master` и `develop`.
+
+Если на пальцах, то `master` - это ветка, в которой всегда хранится последняя версия, которая сейчас находится на
+продакшене (боевом сервере, к которому есть доступ у клиентов).
+
+А `develop` - это то, что сейчас находится в разработке всей командой.
+
+Ветка `develop` создаётся с мастера сразу на старте проекта, до первого коммита, но может быть создана и позже.
+
+### Фича
+
+**Фича** (`feature`) - это реализация одной задачи из беклога. Например, добавить на сайт логин, логин и будет
+фичей.
+
+При таком подходе к гиту для каждой фичи создаётся отдельная ветка, создаётся из ветки `develop`.
+
+После завершения разработки создаётся pull request в ветку `develop`, чтобы обновить на ней текущий код.
+
+По сути `develop` - это местная свалка всего нового кода, который только есть.
+
+### Релиз ветка
+
+Когда команда считает, что пора отдавать фичи на тестирование, из ветки `develop` создаётся ветка `release-x.x`,
+где `x.x` - это условный номер релиза.
+
+Из неё происходит деплоймент на тестовый сервер, где тестировщики ищут баги. Если баги незначительные, то прям в релиз
+ветке фиксятся баги. Если значительные, то возвращаем релиз разработчикам, они всё переделывают и создают новую ветку
+релиза.
+
+После того как релиз ветка прошла все тесты и готова к тому, чтобы обновлять продакшен, из неё создаются два pull
+request'a: на `develop` и на `master`.
+
+На `develop`, чтобы добавить в эту ветку багофиксы, если они были. На `master`, чтобы выполнить деплоймент на продакшен.
+
+На `master` после мёрджа обычно создаётся тег, чтобы была возможность откатить до прошлого тега без особой сложности.
+
+### Hot fix
+
+Но что делать, если задеплоили продакшен и тут же обнаружили небольшой и легко исправляемый баг? Не проходить же всю
+процедуру с начала, пока у клиентов явно есть баг?
+
+Для этого придумали хот фикс ветки, их создают прямо из `master`, и заливают обратно на `master` и на `develop`. Итого 
+на `master`, чтобы задеплоить исправление бага, а на `develop`, чтобы этот баг не попадал в новые фичи.
+
+### Выводы и реальность
+
+Если для проекта нормально применение такого подхода, то я бы очень рекомендовал его применять. Но в реальности
+практически всегда находятся проблемы, которые не совпадают с таким подходом, поэтому очень часто я видел вариации на
+тему `git flow`, чем его сам.
+
+Но идея очень крутая, всё структурировано понятно и возможно найти кто, что и когда.
+
+## CI/CD
+
+CI/CD - Continuous Integration / Continuous Deployment
+
+![](https://habrastorage.org/getpro/habr/upload_files/29f/f1c/c39/29ff1cc39f1ccbfb7e93ad2e31c509e9.png)
+
+Непрерывная интеграция (Continuous Integration, CI) и непрерывная поставка (Continuous Delivery, CD) представляют собой
+культуру, набор принципов и практик, которые позволяют разработчикам чаще и надежнее развертывать изменения программного
+обеспечения.
+
+### Как это видит разработчик
+
+В реальности, CI/CD - это возможность для разработчика, не задумываться о запуске тестов и процессах деплоймента.
+
+Сделали push и создали pull request, CI за вас запустит тесты и соберёт ваш код в готовый для деплоймента вид.
+
+Смерджили pull request, CD за вас автоматически всё задеплоит и перезапустит.
+
+Это описание только одной из конфигураций, на самом деле их может быть огромное количество в зависимости от нужд 
+проекта.
+
+### Термины
+
+`Непрерывная интеграция` — это методология разработки и набор практик, при которых в код вносятся небольшие изменения с
+частыми коммитами. И поскольку большинство современных приложений разрабатываются с использованием различных платформ и
+инструментов, то появляется необходимость в механизме интеграции и тестировании вносимых изменений.
+
+С технической точки зрения цель `CI` — это способ обеспечить последовательный и автоматизированный способ сборки, 
+упаковки и тестирования приложений. При налаженном процессе непрерывной интеграции разработчики с большей вероятностью 
+будут делать частые коммиты, что в свою очередь будет способствовать улучшению коммуникации и повышению качества 
+программного обеспечения.
+
+![](https://flexagon.com/wp-content/uploads/2020/04/a-world-without-ci.cd-meme.jpg)
+
+`Непрерывная поставка` начинается там, где заканчивается непрерывная интеграция. Она автоматизирует развертывание
+приложений в различные окружения: большинство разработчиков работают как с продакшн-окружением, так и со средами
+разработки и тестирования.
+
+Инструменты CI/CD помогают настраивать специфические параметры окружения, которые конфигурируются при развертывании. А
+также CI/CD-автоматизация выполняет необходимые запросы к веб-серверам, базам данных и другим сервисам, которые могут
+нуждаться в перезапуске или выполнении каких-то дополнительных действий при развертывании приложения.
+
+Непрерывная интеграция и непрерывная поставка нуждаются в непрерывном тестировании, поскольку конечная цель — разработка
+качественных приложений. Непрерывное тестирование часто реализуется в виде набора различных автоматизированных тестов 
+(регрессионных, производительности и других), которые выполняются в CI/CD-конвейере.
+
+Зрелая практика CI/CD позволяет реализовать непрерывное развертывание: при успешном прохождении кода через
+CI/CD-конвейер, сборки автоматически развертываются в продакшн-окружении. Команды, практикующие непрерывную поставку,
+могут позволить себе ежедневное или даже ежечасное развертывание. Хотя здесь стоит отметить, что непрерывная поставка
+подходит не для всех бизнес-приложений.
+
+### Практическое применение
+
+Существуют десятки, если не сотни, различных утилит и приложений для реализации CI/CD.
+
+Часто вместо термина CI/CD можно увидеть термин `pipeline`.
+
+У всей "большой тройки" CI/CD процессы называются пайплайнами: AWS pipelines, Azure pipelines и GCP pipelines
+соответственно.
+
+Также невероятно популярны Jenkins, Circle CI, Travis CI и т. д. Их очень много.
+
+Мы сегодня рассмотрим настройку CI/CD при помощи инструмента вшитого в GitHub, Github Actions.
+
+#### Рассмотрим левую часть схемы (CI)
+
+Plan -> Code -> Build -> Test
+
+- *Plan* - продумать, что вы хотите разработать
+
+- *Code* - написать код того, что придумали
+
+- *Build* - в нашем случае этот степ не нужен, так как Python интерпретируемый язык, а Django не требует каких-либо
+  специальных подготовок. Но в целом этот пункт о том, что преобразовать исходный код в вид, подходящий для деплоймента.
+
+- *Test* - запустить тесты
+
+Как выглядит в реальности?
+
+Если мы придерживаемся Scrum и GitFlow, то мы в течение спринта готовим код на ветках `feature`, сливаем код в 
+`develop`, и, когда код готов к релизу, создаём ветку `release`, и из нее создаём pull request на `master`. Прямой пуш 
+в `master` практически всегда запрещён. И наша система должна автоматически по созданию pull request, запустить тесты, 
+и не позволить смерджить код, если тесты не были успешными.
+
+В нашем случае мы будем сильно упрощать эту схему и объединим `feature`, `develop` и `release`. То есть у нас будет
+всего 2 ветки, ветка с новым кодом и `master` (То, что вы делали во всех домашках и модуле)
+
+Как такое сделать при помощи GitHub Actions?
+
+#### Запрещаем прямой пуш в ветку `master`
+
+Для этого на сайте GitHub переходим в `Settings -> Branches` и нажимаем `Add Rule`.
+
+![](https://djangoalevel.s3.eu-central-1.amazonaws.com/lesson49/add+rule.png)
+
+После чего добавляем два правила для нашей основной ветки, в моём случае `master`.
+
+1. Разрешить изменение только через pull request.
+2. Администраторы включительно, чтобы никто не мог изменить ветку, не через pull request.
+
+![](https://djangoalevel.s3.eu-central-1.amazonaws.com/lesson49/settings1.png)
+
+![](https://djangoalevel.s3.eu-central-1.amazonaws.com/lesson49/settings2.png)
+
+Нажимаем `CREATE`
+
+#### Добавляем GITHUB Action
+
+![](https://djangoalevel.s3.eu-central-1.amazonaws.com/lesson49/action+setup.png)
+
+Заходим в раздел `Actions`, GitHub автоматически предложит нам добавить конфигурацию для Django, если вы залили проект
+без ошибок в структуре.
+
+Если автоматически не предложит, то всегда можно найти в поиске.
+
+При нажатии кнопки `Configure` GitHub предложит нам добавить файл `.github/workflows/django.yml`, причем название файла
+можно поменять, а путь нет, потому что, как мы уже знаем, `.github` - это скрытая папка с точки зрения линукса, а 
+`workflow` - папка, в которой GitHub будет искать файлы конфигурации CI.
+
+Стандартный файл `django.yml`:
+
+```yaml
+name: Django CI
+
+on:
+  push:
+    branches: [ "master" ]
+  pull_request:
+    branches: [ "master" ]
+
+jobs:
+  build:
+
+    runs-on: ubuntu-latest
+    strategy:
+      max-parallel: 4
+      matrix:
+        python-version: [ 3.7, 3.8, 3.9 ]
+
+    steps:
+      - uses: actions/checkout@v3
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v3
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+      - name: Run Tests
+        run: |
+          python manage.py test
+
 ```
 
-Хоть так никто и не делает, об этом дальше.
+Давайте рассмотрим этот файл.
 
-## ModelViewSet и ReadOnlyModelViewSet
+`name` - название, тут может быть что угодно
 
-Дока [тут](https://www.django-rest-framework.org/api-guide/viewsets/#modelviewset)
+`on` - команда, которая описывает, когда должна выполняться текущая конфигурация, по дефолту - это push в ветку мастер, 
+или pull request на `master`, так как мы уже запретили push на `master`, этот пункт можно удалить
 
-Объединяем всё что мы уже знаем.
+`jobs` - описание самих выполняемых команд
 
-И получаем класс `ModelViewSet`, он наследуется от `GenericViewSet` (`ViewSet` + `GenericAPIView`) и всех 5 миксинов, а
-значит там описаны методы `list`, `retrieve`, `create`, `update`, `destroy`, `perform_create`, `perform_update`, итд.
+`build` - просто название, тут можно было написать что угодно
 
-А значит мы можем описать сущность, которая принимает модель и сериалайзер, и уже может принимать любые типы запросов и
-выполнять любые CRUD действия. Мы можем их переопределить, или дописать еще экшенов, всё что нам может быть необходимо
-уже есть.
+`matrix/python-version` - список версий Python, на которых необходимо запускать команды, предлагаю оставить только 3.9
+
+`steps` - выполняемые шаги и зависимые модули. В нашем примере используется два дополнительных
+модуля `actions/checkout@v3`, `actions/setup-python@v3`. Первый для взаимодействия с pull request, второй для запуска
+Python. И сами команды, обновить `pip`, запустить установку `requirements.txt` и запуск команды `python manage.py test`.
+
+Весь этот процесс запустится на виртуальной машине принадлежащей GitHub, но нам это и не важно, главное, что мы получим
+результат выполнения тестов, и если тесты не пройдут, то мы не сможем смерджить pull request.
+
+После наших небольших изменений мы получим такой файл:
+
+```yaml
+name: Django CI
+
+on:
+  pull_request:
+    branches: [ "master" ]
+
+jobs:
+  build:
+
+    runs-on: ubuntu-latest
+    strategy:
+      max-parallel: 4
+      matrix:
+        python-version: [ 3.9 ]
+
+    steps:
+      - uses: actions/checkout@v3
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v3
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+      - name: Run Migrations # run migrations to create table in side car db container
+        run: python manage.py migrate
+      - name: Run Tests
+        run: |
+          python manage.py test
+
+```
+
+Сохраняем. Если мы добавили невозможность прямого коммита в `master`, то GitHub предложит нам создать новую ветку и pull
+request, не забудьте его смерджить!!!
+
+По сути в максимально простом виде CI степ уже настроен, и для определённых условий будет даже работать.
+
+![](https://www.memecreator.org/static/images/memes/5391580.jpg)
+
+Но чего тут не хватает? Настройки базы данных! Ведь для запуска тестов практически всегда необходима база данных!
+
+Давайте добавим её в настройки.
+
+Первым делом нам необходимо добавить базу в описание запуска флоу. И добавить степ с миграцией нашей базы.
+
+```yaml
+name: Django CI
+
+on:
+  pull_request:
+    branches: [ "master" ]
+
+jobs:
+  build:
+
+    runs-on: ubuntu-latest
+    services:
+      postgres: # we need a postgres docker image to be booted a side car service to run the tests that needs a db
+        image: postgres
+        env: # the environment variable must match with app/settings.py if block of DATABASES variable otherwise test will fail due to connectivity issue.
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: github-actions
+        ports:
+          - 5432:5432 # exposing 5432 port for application to use
+        # needed because the postgres container does not provide a healthcheck
+        options: --health-cmd pg_isready --health-interval 10s --health-timeout 5s --health-retries 5
+    strategy:
+      max-parallel: 4
+      matrix:
+        python-version: [ 3.9 ]
+
+    steps:
+      - uses: actions/checkout@v3
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v3
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+      - name: Migrate
+        run: python manage.py migrate
+      - name: Run Tests
+        run: |
+          python manage.py test
+
+```
+
+В параметре `env` можно увидеть настроенные юзер, пароль и название базы.
+
+Обратите внимание на параметр `options`, он нужен, чтобы мы выполняли все команды только после того, как postgres
+загрузится.
+
+Также нам необходимо убедиться, что у нас в `requirements.txt` указан `psycopg2`.
+
+И внести изменения в `settings.py`:
+
+```python
+if os.getenv('GITHUB_WORKFLOW'):
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.postgresql',
+            'NAME': 'github-actions',
+            'USER': 'postgres',
+            'PASSWORD': 'postgres',
+            'HOST': 'localhost',
+            'PORT': '5432'
+        }
+    }
+else:
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.postgresql',
+            'NAME': os.getenv('DB_NAME'),
+            'USER': os.getenv('DB_USER'),
+            'PASSWORD': os.getenv('DB_PASSWORD'),
+            'HOST': os.getenv('DB_HOST'),
+            'PORT': os.getenv('DB_PORT')
+        }
+    }
+
+
+```
+
+Обратите внимание, переменная `GITHUB_WORKFLOW` будет добавлена автоматически при запуске.
+
+Теперь наш CI полностью готов к работе!
+
+#### Теперь рассмотрим правую часть схемы (CD)
+
+Release -> Deploy -> Operate -> Monitor
+
+- *Release* - выпустить продукт. По сути, когда код оказался в ветке `master`, продукт релизнут.
+
+- *Deploy* - загрузка и развёртывание кода на сервере.
+
+- *Operate* - провести все необходимые для работы операции, в нашем случае, пересобрать статику и перезапустить NGINX и
+  gunicorn.
+
+- *Monitor* - убедиться, что действия успешны. В нашем случае просто обновить сайт и увидеть, что всё хорошо.
+
+На самом деле для того, чтобы собрать CD и у GitHub, и у практически любого другого инструмента существует большое
+количество разных уже встроенных инструментов, но так как сейчас мы хотим сделать всё наглядно, то и все команды я 
+пропишу вручную.
+
+*Нежелательно использовать такой способ на реальных проектах, это только демонстрация логики!!!*
+
+Для того, чтобы заставить GitHub выполнять CD, мы создадим еще один воркфлоу, который будет выглядеть примерно так:
+
+```yaml
+name: Django CD
+
+on:
+  push:
+    branches: [ "master" ]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    strategy:
+      max-parallel: 4
+      matrix:
+        python-version: [ 3.9 ]
+    steps:
+      - name: deploy command
+        uses: JimCronqvist/action-ssh@master
+        with:
+          command: |
+            source venv/bin/activate
+            cd project_name; git pull
+            python manage.py collectstatic --no-input
+            sudo systemctl restart gunicorn; sudo systemctl restart nginx
+          hosts: ${{ secrets.HOST }}
+          privateKey: ${{ secrets.PRIVATE_KEY}}
+
+```
+
+Давайте разбираться, что именно будет делать такой файл.
+
+Срабатывать он будет на push на ветку `master`. Но мы же запретили push в ветку? Прямой да, но при мёрдже пулл реквеста
+выполняется точно такой же пуш. А значит, этот ворк флоу будет срабатывать при мёрже нашего пулл реквеста, что нам и
+нужно.
+
+Название новой job - `deploy`, просто чтобы удобно было читать логи.
+
+Мы будем запускать Python команды, а значит, нам понадобится раздел `strategy`, точно такой же как для CI.
+
+И добавим один единственный шаг, который выполнит ряд команд сразу на нашем сервере. Вообще это не лучшее решение, но
+для наглядности, это самый удобный способ продемонстрировать CD.
+
+Мы воспользуемся сторонним модулем `JimCronqvist/action-ssh`.
+
+В качестве параметров передадим `command`, `hosts`, `privateKey`.
+
+`hosts` - параметр, в котором мы укажем, куда именно нужно подключаться (в нашем случае url, который выдаёт нам Amazon)
+
+`privateKey` - закрытый ключ, который выдал нам Amazon при создании сервера.
+
+Обратите внимание, в обоих случаях в качестве значения я указываю `${{ secrets.VAR_NAME }}`, что это такое?
+
+Это переменные для Github-actions, мы же не хотим показывать путь к нашему серверу, или тем более ключи от него,
+конфигурационный файл всё еще лежит в репозитории.
+
+Как их создать?
+
+*Settings > Secrets > Action* - и там можно создавать переменные.
+
+И давайте разберём, какие команды я указал выполнить.
+
+```yaml
+  source venv/bin/activate
+  cd project_name; git pull
+  python manage.py collectstatic --no-input
+  sudo systemctl restart gunicorn; sudo systemctl restart nginx
+```
+
+1. Активировать виртуальное окружение, так как мы собираемся собирать статику через `manage.py`, этот шаг нам необходим
+2. Перейти в папку с проектом и спулить последние изменения
+3. Собрать статику, параметр `--no-input` позволит сделать это без дополнительных подтверждений
+4. Перезапустить сервисы Nginx и Gunicorn
+
+Название проекта и путь к виртуальному окружению можно было также скрыть через `SECRETS`.
+
+Мердж пулл реквеста - это `release`.
+
+Шаги 1-2 - это `deploy`.
+
+Шаги 3-4 - это `operate`.
+
+Остаётся только `monitor`, в нашем случае мы сделаем это руками.
+
+Создадим любые видимые изменения (например, поменять что-то в html или заменить статический файл), в новой ветке,
+допустим `cicd_test`.
+
+Создадим pull request, посмотрим как GitHub не позволит нам смерджить его, пока не пройдёт шаг с тестами.
+
+Смерджим после успешных тестов.
+
+В разделе `actions` посмотрим, как выполняется деплой, после чего проверим, что изменения действительно вступили в силу.
+
+Радуемся, что простейший CI/CD работает.
+
+![](https://miro.medium.com/max/998/1*mdosfNhm7Lmp20b8LEW7tQ.png)
+
+Не забываем, что это только одна из тысяч возможных конфигураций, причём не самая удачная на самом деле еще и упускающая
+многие нужные детали и подробности! В крупных компаниях всей этой настройкой занимаются отдельные люди, их
+называют `DevOps`, сокращение от Development and Operation, а еще бывают `DevSecOps` - Development Secure Operation.
+
+Но в небольших компаниях вся эта настройка тоже на вас :)
+
+## Монолиты и микросервисы
+
+Настало время поговорить про архитектуру.
+
+![](https://say-hi.me/wp-content/uploads/2014/09/sagrada_familia_4_modifie1.jpg)
+
+И нет, мы будем говорить не про здания и урбанистику.
+
+Под архитектурой в данном контексте я подразумеваю архитектуру построения технического решения.
+
+![](https://media.proglib.io/posts/2019/09/19/4fde07b37f99708975add2813082c098.webp)
+
+Под монолитом обычно подразумевается техническое решение, собранное на одном стеке технологий и разворачиваемое целиком,
+одним большим пакетом.
+
+Когда вы разрабатывали Django приложение, вы разрабатывали монолит, сами о том не догадываясь.
+
+А как бывает еще?
+
+Как можно догадаться из заголовка еще бывают микросервисы. Что же это такое?
+
+Это когда у нас любые минимальные действия разбиты на маленькие сервисы, и они между собой не зависимы друг от друга.
+
+Возьмем в качестве примера обычный интернет магазин. Предположим, мы уже купили базу данных у Amazon, а Redis сервис у
+Google.
+
+Как разбить задачу на микросервисы? Например, у нас может быть отдельный сервис (приложение), которое отвечает за логин.
+Отдельное приложение, которое возвращает список товаров. Отдельное приложение, которое позволяет взаимодействовать с
+личным кабинетом. Отдельный сервис, отвечающий за рассылку рекламы и новостей, и отдельный сервис, который обрабатывает
+платежи.
+
+Зачем такое делать и какой в этом смысл? Допустим, вы собрали монолит с таким же функционалом. И вдруг выясняется, что
+посмотреть на товары заходят сотни тысяч людей, а остальным функционалом почти никто не пользуется. Чтобы выдержать
+нагрузку, необходимо расширять весь монолит, что может быть очень дорого, и гораздо дешевле для одного отдельного
+сервиса. Это лишь один из примеров, давайте пройдёмся по всем плюсам и минусам таких архитектур.
+
+![](https://media.proglib.io/posts/2019/09/18/379a434eb170516211ee253dfc607075.png)
+
+### Плюсы микросервисов
+
+У такой архитектуры достаточно много плюсов
+
+#### Масштабируемость
+
+Как я уже описывал в примере раньше, при таком подходе мы легко можем увеличить ресурсы для одного сервиса и убрать для
+другого, но это еще не всё.
+
+Так как микросервисы могут вообще быть не связаны технологиями, у нас может быть один модуль написан на Python, второй
+на Go, а третий на Java.
+
+А это значит, что можно распределять разработчиков в зависимости от необходимости конкретного сервиса (нанять два
+джависта, и уволить питониста)
+
+#### Легковесность
+
+Каждый микросервис при разработке всегда будет меньше размером чем монолит, а значит, что будет деплоиться быстрее,
+прогонять тесты быстрее и т. д. Что позволяет значительно ускорить операционные вопросы.
+
+#### Обновляемость и независимость
+
+Если у нас есть устаревший монолит, и мы хотим обновить его на новую версию языка или технологию, обычно это 
+невыносимый, мучительный процесс.
+
+В микросервисном подходе в этом нет проблемы, логин может быть написан на устаревшей Java, а платёжная система на самом
+новом Python, допустим на FastAPI.
+
+Если мы хотим что-то обновить или переписать на другой язык, нам достаточно исправить только один модуль и никак не
+трогать другие.
+
+Еще одним плюсом является не связанность между собой этих модулей. Не может получиться такой ситуации, когда поправили
+одну строчку кода, а задели 5 приложений. А значит, не надо писать кучу новых тестов, что экономит время.
+
+#### Изолированость
+
+Если по какой-то причине у нас отпадёт сервис, который рассылает рекламу, от этого весь проект работать не перестанет,
+при монолитном подходе это не так.
+
+#### Читаемость и онбординг
+
+Гораздо проще разобраться в сервисе, который занимается одним процессом, чем изучать огромное скопление кода, хоть при
+переходе в другую команду, хоть приходя с улицы.
+
+Да и в целом монолит очень часто со временем перерастает в нечитаемое "месиво".
+
+### Минусы микросервисов
+
+Минусов тоже хватает :)
+
+#### E2E Тесты
+
+Когда нам нужно провести End-2-End тестирование какой-то фичи, это может быть проблемным из-за того, что одна бизнес
+задача может решаться через большое количество сервисов.
+
+#### Транзакции
+
+Очень сложно контролировать транзакции, когда процесс проходит сразу во многих микросервисах, особенно когда несколько
+из них работают над одними и теми же данными.
+
+#### Обновление
+
+Если нужно внести какие-то глобальные обновления, очень высок шанс, что необходимо будет координировать несколько
+команд, а это часто бывает большой проблемой.
+
+#### Много DevOps
+
+Для поддержки таких процессов часто нужен большой штат из девопсов, чтобы они отвечали за отдельные развёртывания
+отдельных процессов.
+
+### Вывод
+
+Правильного ответа, какую архитектуру использовать, обычно не существует, есть свои плюсы и минусы. В современном мире
+чаще всё-таки встречаются микросервисы, но это не мешает, например, Instagram работать как монолит. В идеале оставьте
+вопрос архитектуры для архитекторов, если есть такая возможность.
+
+## Docker
+
+Кто такой докер?
+
+![](https://www.meme-arsenal.com/memes/6f421c7f32d39cac50982f0388050ca5.jpg)
+
+Docker — один из самых известных инструментов по работе с контейнерами.
+
+Давайте разберёмся, кто такие контейнеры.
+
+**Контейнеры** — это способ стандартизации развертки приложения и отделения его от общей инфраструктуры. Экземпляр
+приложения запускается в изолированной среде, не влияющей на основную операционную систему.
+
+Разработчикам не нужно задумываться, в каком окружении будет работать их приложение, будут ли там нужные настройки и
+зависимости. Они просто создают приложение, упаковывают все зависимости и настройки в некоторый единый образ. Затем этот
+образ можно запускать на других системах, не беспокоясь, что приложение не запустится.
+
+![](https://www.meme-arsenal.com/memes/c69830fc6e8ed01171ad3167fe4405ef.jpg)
+
+**Docker** — это платформа для разработки, доставки и запуска контейнерных приложений. Docker позволяет создавать
+контейнеры, автоматизировать их запуск и развертывание, управляет жизненным циклом. Он позволяет запускать множество
+контейнеров на одной хост-машине.
+
+### Docker решает проблемы зависимостей и рабочего окружения
+
+Контейнеры позволяют упаковать в единый образ приложение и все его зависимости: библиотеки, системные утилиты и файлы
+настройки. Это упрощает перенос приложения на другую инфраструктуру.
+
+Например, разработчики создают приложение в системе разработки — там все настроено, приложение работает. Когда оно
+готово, его нужно перенести в систему тестирования, а затем в продуктивную среду. Если в одной из них нет нужной
+зависимости, приложение не будет работать. Программистам придется отвлечься от разработки и совместно с командой
+поддержки разобраться в ситуации.
+
+В контейнерах такой проблемы нет, так как они содержат в себе все необходимое для запуска приложения. Специалисты
+занимаются разработкой, а не решением инфраструктурных проблем.
+
+### Изоляция и безопасность
+
+Контейнер — это набор процессов, изолированных от основной операционной системы. Приложения работают только внутри
+контейнеров и не имеют доступа к основной операционной системе. Это повышает безопасность приложений:они не смогут
+случайно или умышленно навредить основной системе. Если приложение в контейнере завершится с ошибкой или зависнет, это
+никак не затронет основную ОС.
+
+### Ускорение и автоматизация развертывания приложений и масштабируемость
+
+Контейнеры упрощают развертывание приложений. В классическом подходе для установки программы нужно совершить несколько
+действий: выполнить скрипт, изменить файлы настроек и так далее. В этом процессе не исключена вероятность человеческой
+ошибки: пользователь запустит скрипт два раза, перепутает последовательность или что-то не поймет. Контейнеры позволяют
+полностью автоматизировать этот процесс, так как включают в себя все нужные зависимости и порядок выполнения действий.
+
+Также контейнеры упрощают развертывание на нескольких серверах. В классическом подходе для того, чтобы развернуть одно и
+то же приложение на нескольких машинах, нужно будет повторять одни и те же действия. Контейнеры избавляют от этой
+рутинной работы и позволяют автоматизировать развертывание.
+
+![](https://res.cloudinary.com/practicaldev/image/fetch/s--rI3jLpl3--/c_limit%2Cf_auto%2Cfl_progressive%2Cq_auto%2Cw_880/https://dev-to-uploads.s3.amazonaws.com/uploads/articles/w7hqdvkzj07mddjedq7u.jpg)
+
+### Контейнеры приближают к микросервисной архитектуре
+
+Контейнеры хорошо вписываются в микросервисную архитектуру. Это подход к разработке, при котором приложение разбивается
+на небольшие компоненты, по возможности независимые. Обычно противопоставляется монолитной архитектуре, где все части
+системы сильно связаны друг с другом.
+
+Это позволяет разрабатывать новую функциональность быстрее, ведь в случае с монолитной архитектурой изменение какой-то
+части может затронуть всю остальную систему.
+
+### Docker compose — одновременно развернуть несколько контейнеров
+
+Docker-compose позволяет разворачивать и настраивать несколько контейнеров одновременно. Например, для веб-приложения
+нужно развернуть стек LAMP: Linux + Apache, MySQL, PHP. Каждое из приложений — это отдельный контейнер для ОС Linux. Но
+в этой ситуации нам нужны именно все контейнеры вместе, а не отдельно взятое приложение. Docker-compose позволяет
+развернуть и настроить все приложения одной командой, а без него пришлось бы разворачивать и настраивать каждый
+контейнер отдельно.
+
+### Хранение данных в Docker
+
+Одна из главных особенностей контейнеров — эфемерность. Это означает, что контейнеры могут быть в любой момент
+остановлены, перезапущены или уничтожены. При этом все накопленные данные в контейнере будут потеряны. Поэтому
+приложения нужно разрабатывать так, чтобы они не полагались на хранилище данных в контейнере, это называется принципом
+**Stateless**.
+
+Это хорошо подходит для приложений или сервисов, которые не сохраняют результаты своей работы. Например, функции расчета
+или преобразования данных: им на вход поступил один набор данных, они его преобразовали или рассчитали и вернули
+результат. Все, ничего никуда сохранять не нужно.
+
+![](https://preview.redd.it/3ds8gewnyxg51.jpg?auto=webp&s=a4d6e81743276487814f0e20934f3f8121b16611)
+
+Но далеко не все приложения такие, и есть много данных, которые нужно сохранить. В контейнерах для этого предусмотрены
+несколько способов.
+
+Поэтому я рекомендую использовать внешние базы данных для реальной разработки, ведь неважно откуда будет запрос, с
+локали, сервера или докера.
+
+### Архитектура (компоненты) Docker
+
+#### Docker daemon
+
+Это некоторый резидентный процесс, который запущен на хост-машине постоянно. Он владеет всей инфраструктурой, а также
+предоставляет интерфейс взаимодействия с контейнерами, включающего создание и удаление, запуск и остановку.
+
+В ранних версиях платформы Docker можно встретить упоминание о dockerd, но на текущий момент демоны уже успели разбиться
+на отдельные проекты. Все чаще можно встретить его современника — containerd.
+
+#### Docker client (клиент)
+
+Это интерфейс командной строки для управления Docker daemon. Мы пользуемся этим клиентом, когда создаем и разворачиваем
+контейнеры, а клиент отправляет эти запросы в Docker daemon.
+
+#### Docker image (образ)
+
+Это неизменяемый файл (образ), из которого разворачиваются контейнеры. Приложения упаковываются именно в образы, из
+которых потом уже создаются контейнеры. В технической литературе можно также встретить описание image как шаблона
+запуска процесса.
+
+Приведем аналогию на примере установки операционной системы. В дистрибутиве (образе) ОС есть все, что необходимо для ее
+установки. Но этот образ нельзя запустить, для начала его нужно «развернуть» в готовую ОС. Так вот, дистрибутив для
+установки ОС — это образ, а установленная и работающая ОС — это контейнер. Но контейнеры обычно разворачиваются одной
+командой — это намного проще и быстрее, чем установка ОС.
+
+#### Docker container (контейнер)
+
+Это уже развернутое из образа и работающее приложение.
+
+### Docker Registry
+
+Это репозиторий с образами. Разработчики создают образы своих программ и выкладывают их в репозиторий, чтобы их можно
+было скачать и воспользоваться ими. Распространенный публичный репозиторий — Docker Hub. В нем собраны образы множества
+популярных программ или платформ: базы данных, веб-серверы, компиляторы, операционные системы и так далее. Также можно
+создать свой приватный репозиторий, например, внутри компании. Разработчики будут размещать там образы, которые будут
+использоваться всей компанией.
+
+### Dockerfile
+
+Dockerfile — это инструкция для сборки образа. Это простой текстовый файл, содержащий по одной команде в каждой строке.
+В нем указываются все программы, зависимости и образы, которые нужны для разворачивания образа.
 
 Пример:
 
-```python
-class AccountViewSet(viewsets.ModelViewSet):
-    """
-    A simple ViewSet for viewing and editing accounts.
-    """
-    queryset = Account.objects.all()
-    serializer_class = AccountSerializer
-    permission_classes = [IsAccountAdminOrReadOnly]
+```dockerfile
+FROM python:3 
+COPY main.py /
+CMD [ "python", "./main.py" ]
 ```
 
-Или если необходим такой же вьюсет только для получения объектов то:
+Первая строчка означает, что за основу мы берем образ с названием Python версии 3 - это называется базовый образ. Docker
+найдет его в docker registry, скачает и будет использовать за основу. Вторая строчка означает, что нужно скопировать
+файл `main.py` в корень файловой системы контейнера. Третья строчка означает, что нужно запустить Python и передать ему в
+качестве параметра название файла `main.py`.
 
-```python
-class AccountViewSet(viewsets.ReadOnlyModelViewSet):
-    """
-    A simple ViewSet for viewing accounts.
-    """
-    queryset = Account.objects.all()
-    serializer_class = AccountSerializer
-```
+### Основные команды
 
-На самом деле можно собрать такой же вьюсет для любых действий, добавляя и убирая миксины.
+- Команда `docker build` читает dockerfile и собирает образ.
 
-Например:
+- Команда `docker pull` скачивает образ из docker registry. По умолчанию, docker скачивает образы из публичного 
+  репозитория Docker Hub. Но можно создать свой репозиторий и настроить docker, чтобы он работал с ним.
 
-```python
-from rest_framework import mixins
+- Команда `docker run` берет образ и запускает из него контейнер.
 
+### Docker compose
 
-class CreateListRetrieveViewSet(mixins.CreateModelMixin,
-                                mixins.ListModelMixin,
-                                mixins.RetrieveModelMixin,
-                                viewsets.GenericViewSet):
-    """
-    A viewset that provides `retrieve`, `create`, and `list` actions.
+Docker Compose - это возможность запустить несколько контейнеров одновременно и зависимо друг от друга.
 
-    To use it, override the class and set the `.queryset` and
-    `.serializer_class` attributes.
-    """
-    pass
-```
+Именно таким способом запускается большинство проектов, так как одного образа обычно недостаточно.
 
-Чаще всего используются обычные ModelViewSet.
+Например, нам необходимо сразу запустить, `gunicorn`, `nginx`, `postgres`.
 
-### Пагинация
+К сожалению, как использовать докер для деплоймента Django приложения, например, на Amazon, настолько огромная тема,
+что мне не хватило бы и 3 занятия, так что давайте разберём, что успеем по готовым статьям. А изучить это детально, я
+предлагаю вам самостоятельно:
 
-Дока [тут](https://www.django-rest-framework.org/api-guide/pagination/)
+Статьи:
 
-Для действия `list` как мы помним используется пагинация. Как это работает?
+[Докер и джанго](https://testdriven.io/blog/dockerizing-django-with-postgres-gunicorn-and-nginx/)
 
-Если у нас нет необходимости настраивать все вьюсеты отдельно, то мы можем укать такую настройку в `settings.py`
+[Докер, джанго и let's encrypt](https://testdriven.io/blog/django-lets-encrypt/)
 
-```python
-REST_FRAMEWORK = {
-    'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.LimitOffsetPagination',
-    'PAGE_SIZE': 100
-}
-```
+[Докер,джанго, let's encrypt и деплоймент на AWS](https://testdriven.io/blog/django-docker-https-aws/)
 
-Там мы можем указать тип класса пагинации, и размер одной страницы, и все наши запросы уже будут пагинированы.
-
-Так же мы можем создать классы пагинаторов основываясь на нашей необходимости.
-
-```python
-class LargeResultsSetPagination(PageNumberPagination):
-    page_size = 1000
-    page_size_query_param = 'page_size'
-    max_page_size = 10000
-
-
-class StandardResultsSetPagination(PageNumberPagination):
-    page_size = 100
-    page_size_query_param = 'page_size'
-    max_page_size = 1000
-```
-
-Если нужно указать пагинатор у конкретного вьюсета, то можно это сделать прямо в атрибутах.
-
-```python
-class BillingRecordsView(generics.ListAPIView):
-    queryset = Billing.objects.all()
-    serializer_class = BillingRecordsSerializer
-    pagination_class = LargeResultsSetPagination
-```
-
-## Декоратор action
-
-Дока [тут](https://www.django-rest-framework.org/api-guide/viewsets/#marking-extra-actions-for-routing)
-
-Что делать если вам нужно дополнительное действие связанное с деталями вашей вью, но ни один из крудов не походит? Тут
-можно использовать декоратор @action, что бы описать новое действие в этом же вьюсете
-
-```python
-from django.contrib.auth.models import User
-from rest_framework import status, viewsets
-from rest_framework.decorators import action
-from rest_framework.response import Response
-from myapp.serializers import UserSerializer, PasswordSerializer
-
-
-class UserViewSet(viewsets.ModelViewSet):
-    """
-    A viewset that provides the standard actions
-    """
-    queryset = User.objects.all()
-    serializer_class = UserSerializer
-
-    @action(detail=True, methods=['post'])
-    def set_password(self, request, pk=None):
-        user = self.get_object()
-        serializer = PasswordSerializer(data=request.data)
-        if serializer.is_valid():
-            user.set_password(serializer.data['password'])
-            user.save()
-            return Response({'status': 'password set'})
-        else:
-            return Response(serializer.errors,
-                            status=status.HTTP_400_BAD_REQUEST)
-
-    @action(detail=False)
-    def recent_users(self, request):
-        recent_users = self.get_queryset().order_by('-last_login')
-
-        page = self.paginate_queryset(recent_users)
-        if page is not None:
-            serializer = self.get_serializer(page, many=True)
-            return self.get_paginated_response(serializer.data)
-
-        serializer = self.get_serializer(recent_users, many=True)
-        return Response(serializer.data)
-```
-
-Принимает два основных параметра, `detail` - описывает должен ли этот экшен принимать PK (действие над всеми объектами
-или над одним конкретным), и `methods` - список http методов, на которые должен срабатывать action.
-
-Есть и другие, например классы пермишенов, или имя.
-
-## Роутеры
-
-Дока [тут](https://www.django-rest-framework.org/api-guide/routers/)
-
-Роутер, это автоматический генератор урлов для вьюсетов.
-
-```python
-from rest_framework import routers
-
-router = routers.SimpleRouter()
-router.register(r'users', UserViewSet)
-router.register(r'accounts', AccountViewSet)
-urlpatterns = router.urls
-```
-
-В методе `register` принимает два параметра, на каком слове основывать урлы, и для какого вьюсета.
-
-Если у вьюсета нет параметра `queryset`, то нужно указать поле `basename` если нет, то автоматически будет использовано
-имя модели, маленькими буквами.
-
-Урлы будут сгенерированы автоматически и им будут автоматически присвоены имена:
-
-```
-URL pattern: ^users/$ Name: 'user-list'
-URL pattern: ^users/{pk}/$ Name: 'user-detail'
-URL pattern: ^accounts/$ Name: 'account-list'
-URL pattern: ^accounts/{pk}/$ Name: 'account-detail'
-```
-
-Чаще всего роутеры к урлам добавляются вот такими способами:
-
-```python
-urlpatterns = [
-    path('forgot-password', ForgotPasswordFormView.as_view()),
-    path('api/', include(router.urls)),
-]
-```
-
-### Роутинг экстра экшенов
-
-Допустим есть такой экстра экшен
-
-```python
-from rest_framework.decorators import action
-
-
-class UserViewSet(ModelViewSet):
-    ...
-
-    @action(methods=['post'], detail=True)
-    def set_password(self, request, pk=None):
-        ...
-```
-
-то роутер автоматически сгенерирует урл `^users/{pk}/set_password/$` и имя `user-set-password`
-
-Класс `SimpleRouter` может принимать параметр `trailing_slash=False` True или False, по дефолту тру, поэтому все апи,
-должны принимать урлы заканчивающиеся на `/`, если указать явно, то будет принимать всё без `/`.
-
-## Практика/домашка
-
-Создать две модели. Книга и Автор связанные через ForeignKey, у автора есть имя и возраст. У книги есть название.
-
-1) Полный круд для двух объектов, книга и автор, должны работать все виды запросов через постман
-
-2) При создании книги добавлять в конце названия символ "!"
-
-3) Для метода GET книги, добавить опциональный параметр author_age, если он указан, и там число, то отображать только
-   книги, если возраст автора больше или равен указанного.
-
-4) Для метода GET автора, добавить опциональный параметр book_name, для фильтрации авторов у которых есть книги, у
-   которых название частично совпадают с указанным параметром. (Например, если у автора есть только одна книга "Азбука",
-   то по запросу "бук" этот автор должен быть в списке, по запросу "ква", нет)
-
-5) Добавить отдельный экшен, что бы получать объект автора с полем books, в котором будут лежать id всех книг этого
-   автора
+# Желаю удачи на выпуске!

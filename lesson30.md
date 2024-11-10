@@ -1,529 +1,824 @@
-# Урок 30. Модели
+# Лекция 30. @api_view, APIView, ViewSets, Pagination, Routers
 
-![](https://www.meme-arsenal.com/memes/ec0eba9bc1a90ba417d786f9096cce72.jpg)
+Все мы помним, что веб в первую очередь - это Request-Response система.
 
-### Нет, не такие :)
+## Request
 
-## Установка базы
+Что нового в request.
 
-В наших примерах, мы будем использовать PostgreSQL, для этого предварительно нужно эту базу установить.
+Дока [тут](https://www.django-rest-framework.org/api-guide/requests/)
 
-Скачать, если не установлена: [Тут](https://www.postgresql.org/download/)
+Два новых парамера `.data` и `.query_string`
 
-## Cоздание базы и пользователя базы
+`.data` - данные, если запрос POST, PUT или PATCH, аналог `request.POST` или `request.FILES`
 
-[Прекрасная статья по этому поводу под Linux](https://medium.com/coding-blocks/creating-user-database-and-adding-access-on-postgresql-8bfcd2f4a91e)
+`.query_string` - данные, если запрос GET, аналог `request.GET`
 
-Предположим, что база у вас установлена, и пароль для пользователя `postgres` создан.
+И параметры `.auth` и `.authenticate`, которые мы рассмотрим на следующей лекции. Она целиком про авторизацию и
+`permissions` (доступы).
 
-Заходим в консоль базы данных
+## Response
 
-Под Windows:
+Дока [тут](https://www.django-rest-framework.org/api-guide/responses/)
 
-`psql -U postgres`
+В отличие от классической Django, ответом в REST системе будет обычный HTTP-ответ, содержащий набор данных, чаще
+всего JSON (но бывает и нет).
 
-Под Linux:
+Классическая Django тоже может возвращать HTTP-ответ и быть обработчиком REST архитектуры, но существующий пакет
+сильно упрощает эти процессы.
 
-`sudo -u postgres psql`
+Для обработки такого ответа есть специальный объект:
 
-Под Windows вы должны увидеть нечто похожее:
+```Response(data, status=None, template_name=None, headers=None, content_type=None)```
 
-![](https://djangoalevel.s3.eu-central-1.amazonaws.com/lesson35/psql.png)
+где `data` - данные,
 
-Создаём базу с кодировкой 'UTF8', что бы избежать проблем с русским и другими языками в базе.
+`status` - код ответа (200, 404, 503),
 
-`create database mydb with encoding 'UTF8';`
+`template_name` - возможность указать темплейт, если необходимо вернуть страницу, а не просто набор данных,
 
-Создаём пользователя для пользования этой базой.
+`headers` и `content_type` - заголовки и тип содержимого запроса.
 
-`create user myuser with password 'mypass';`
+## Настройка для получения JSON
 
-Даём новому пользователю права для использования новой базой.
-
-`grant all on database mydb to myuser;`
-
-Консоль в конце должна выглядеть так:
-
-![](https://djangoalevel.s3.eu-central-1.amazonaws.com/lesson35/database_and_user.png)
-
-Для выхода из консоли наберите `\q` и нажмите Enter.
-
-## Конфигурация Django
-
-Открываем проект, и в нём файл `settings.py`
-
-И находим строку `DATABASES`
-
-Если вы ничего не меняли, то выглядеть должна так:
-
-![](https://djangoalevel.s3.eu-central-1.amazonaws.com/lesson35/sqllitedb.png)
-
-Заменяем на
+Если нужно указать явно формат для получения или отправки, то можно указать его в `settings.py`:
 
 ```python
-DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.postgresql_psycopg2',
-        'NAME': 'mydb',
-        'USER': 'myuser',
-        'PASSWORD': 'mypass',
-        'HOST': 'localhost',
-        'PORT': '5432',
-    }
+REST_FRAMEWORK = {
+    'DEFAULT_RENDERER_CLASSES': [
+        'rest_framework.renderers.JSONRenderer',
+    ],
+    'DEFAULT_PARSER_CLASSES': [
+        'rest_framework.parsers.JSONParser',
+    ]
 }
 ```
 
-Где `ENGINE` это "движок" он же модуль отвечающий за работу базы данных,
+## @api_view
 
-`NAME` это имя базы,
+Дока [тут](https://www.django-rest-framework.org/api-guide/views/#api_view)
 
-`USER` это имя пользователя,
-
-`PASSWORD` это пароль пользователя,
-
-`HOST` это хост(урл, расположение базы),
-
-`PORT` это порт (5432 стандартный порт для postgres, если вы его изменили при установке, укажите свой).
-
-Для того, что бы это работало, нужно установить тот самый "движок".
-
-```
-pip install psycopg2  # windows
-pip install psycopg2-binary  # unix
-```
-
-в зависимости от вашей операционной системы
-
-**Не забывайте про venv**
-
-Если вы всё сделали правильно, то при запуске сервера (`python manage.py runserver`) вы должны увидеть, что-то такое:
-
-![](https://djangoalevel.s3.eu-central-1.amazonaws.com/lesson35/working.png)
-
-## Команда migrate
-
-Обратите внимание на вот эту надпись:
-
-![](https://djangoalevel.s3.eu-central-1.amazonaws.com/lesson35/migrate_text.png)
-
-Когда мы создаём Django проект, мы создаём приложения для своих нужд, но на самом деле, внутри уже есть несколько
-приложений для общих нужд, `admin`, `auth`, `contenttype`, `session`.
-
-Все их мы разберем немного позже, в данный момент критичным является то, что в каждом из этих приложений находится
-информация о том что должно храниться в базе, а наша свежая, только что созданная база, не имеет нужных таблиц, в
-соответствии с моделями описанными в этих приложениях, описания того что должно быть в базе называются **Миграции**.
-
-При применении миграций, в базе создаются нужные таблицы, поля, связи итд.
-
-Для применения нужно выполнить команду
-
-`python manage.py migrate`
-
-Если всё ок, то результат выполнения должен выглядеть примерно так:
-
-![](https://djangoalevel.s3.eu-central-1.amazonaws.com/lesson35/migrate.png)
-
-## Приложения
-
-Для того что бы Django увидела какие-либо изменения нужно добавлять каждое своё приложение в `settings.py`
-
-Находим в этом файле `INSTALLED_APPS`
-
-и дописываем наше приложение, что бы получилось:
+Для описания `endpoint` функционально нужно указать декоратор `api_view` и методы, которые он может принимать.
+Возвращает всё также объект ответа. Для использования возьмем модель `Book` и сериалайзер `BookSerializer`, из
+последнего примера прошлой лекции
 
 ```python
-INSTALLED_APPS = [
-    'django.contrib.admin',
-    'django.contrib.auth',
-    'django.contrib.contenttypes',
-    'django.contrib.sessions',
-    'django.contrib.messages',
-    'django.contrib.staticfiles',
-    'myapp'
-]
+from rest_framework import status
+from rest_framework.decorators import api_view
+from rest_framework.response import Response
+from myapp.models import Book
+from myapp.serializers import BookSerializer
+
+
+@api_view(['GET', 'POST'])
+def book_list(request):
+    """
+    List all books, or create a new book.
+    """
+    if request.method == 'GET':
+        books = Book.objects.all()
+        serializer = BookSerializer(books, many=True)
+        return Response(serializer.data)
+
+    elif request.method == 'POST':
+        book = BookSerializer(data=request.data)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 ```
 
-Теперь всё готово, для того что бы начинать разработку собственных моделей!!
+Обратите внимание, в пакете REST фреймворка сразу есть заготовленные объекты статуса для ответа.
 
-![](https://djangoalevel.s3.eu-central-1.amazonaws.com/lesson35/start.jpg)
+Если попытаться получить доступ методом, который не разрешен, запрос будет отклонён с ответом `405 Method not allowed`
 
-## Создание моделей
-
-Всё еще лучше, чем официальная документация еще никто и ничего не придумал, офф
-дока [Тут](https://docs.djangoproject.com/en/2.2/topics/db/models/)
-
-Что такое класс модели? Это таблица для базы данных, где атрибуты это её поля.
-
-Давайте создадим модель!
-
-В файле `myapp/models.py`
-
-Напишем вот это:
+Для передачи параметров используются аргументы функции. (Очень похоже на обычную Django вью)
 
 ```python
-from django.db import models
+@api_view(['GET', 'PUT', 'DELETE'])
+def book_detail(request, pk):
+    """
+    Retrieve, update or delete a book.
+    """
+    try:
+        book = Book.objects.get(pk=pk)
+    except Book.DoesNotExist:
+        return Response(status=status.HTTP_404_NOT_FOUND)
 
+    if request.method == 'GET':
+        serializer = BookSerializer(book)
+        return Response(serializer.data)
 
-class Article(models.Model):
-    name = models.CharField(max_length=100)
-    text = models.TextField(null=True, blank=True)
-``` 
+    elif request.method == 'PUT':
+        serializer = BookSerializer(book, data=request.data)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-Мы создали нашу первую модель, состоящую из **3** полей, поля `name`, `text`, `id`, при чём id создался автоматически
-без нашего участия, автоматически стало primary key. Поле `name` не может содержать более 100 символов Поле `text` может
-быть "пустым" или отсутствовать полностью.
+    elif request.method == 'DELETE':
+        book.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+```
 
-Для того, что бы наши изменения попали в базу, нужно создать и применить миграцию.
-
-#### Команда makemigrations
-
-Теперь мы применим команду
-
-`python manage.py makemigrations`
-
-И увидим нечто похожее на:
-
-![](https://djangoalevel.s3.eu-central-1.amazonaws.com/lesson35/makemigrations.png)
-
-Django радостно нам сообщает, что миграция была создана, давайте проверим, откроем папку `myapp/migrations` и увидим там
-новый файл `0001_initial.py`
-
-Выглядеть он будет вот так:
-
-![](https://djangoalevel.s3.eu-central-1.amazonaws.com/lesson35/init_migration.png)
-
-Где мы можем убедиться, что Django действительно создала за нас поле `id`
-
-#### Команда showmigrations
-
-Что бы убедиться, что миграция не применена/применена используется команда
-
-`python manage.py showmigrations`
-
-Результат:
-
-![](https://djangoalevel.s3.eu-central-1.amazonaws.com/lesson35/showmigrations.png)
-
-Как мы можем видеть, наша миграция существует, но не применена, давайте применим её, при помощи `migrate`
-
-Результат:
-
-![](https://djangoalevel.s3.eu-central-1.amazonaws.com/lesson35/migrate_init.png)
-
-И сравним `showmigrations` теперь:
-
-![](https://djangoalevel.s3.eu-central-1.amazonaws.com/lesson35/showmigrations_after.png)
-
-## Админка
-
-Самый быстрый и удобный способ смотреть на объекты моделей это админка, для того, что бы ей пользоваться нужно сделать
-две вещи, в урлы добавить встроенный урл админки, и создать суперпользователя.
-
-Что бы создать пользователя нам поможет команда
-
-`python manage.py createsuperuser`
-
-Вводим всё что от нас требует консоль, и юзер будет создан:
-
-![](https://djangoalevel.s3.eu-central-1.amazonaws.com/lesson35/createsuperuser.png)
-
-Если вы не стирали урл для админки, то он уже у вас есть, если стирали, то допишите в `myproject/urls.py`
+URLs для таких методов описываются точно так же как и для стандартной Django вью.
 
 ```python
-from django.contrib import admin
+from myapp.view import book_list, book_detail
 
 urlpatterns = [
-    path('admin/', admin.site.urls),
-    ...
+    path('books/', book_list),
+    path('books/<int:pk>/', book_detail),
 ]
 ```
 
-Перезапускаем сервер, и заходим на
-[Админку](https://127.0.0.1:8000/admin)
+Ответ на GET-запрос в этому случае будет выглядеть так:
 
-![](https://djangoalevel.s3.eu-central-1.amazonaws.com/lesson35/admin_login.png)
-
-Вбиваем свои криды, и видим:
-
-![](https://djangoalevel.s3.eu-central-1.amazonaws.com/lesson35/admin_first_login.png)
-
-По дефолту, у джанго сразу есть две модели из "коробки", User и Group,
-
-Но нет нашей модели, почему же? Потому что нужные модели нужно регистрировать, что бы не заполнять админку не нужными
-данными.
-
-Для этого нам нужно в файле `admin.py` в вашем приложении импортировать вашу модель и зарегистрировать её
-
-```python
-from django.contrib import admin
-from .models import Article
-
-admin.site.register(Article)
+```json
+[
+  {
+      "title": "Harry Potter and the Philosopher's Stone",
+      "published_date": "1997-06-26",
+      "id": 1
+    },
+    {
+      "title": "Harry Potter and the Chamber of Secrets",
+      "published_date": "1998-07-02",
+      "id": 2
+    }
+]
 ```
 
-Открываем админку еще раз:
+Поля будут зависеть от модели и сериалайзера соответственно.
 
-![](https://djangoalevel.s3.eu-central-1.amazonaws.com/lesson35/add_model_to_admin.png)
+Ответ на POST запрос (создание объекта):
 
-Появилась наша модель, через админку мы можем добавлять, удалять, смотреть, редактировать наши модели.
-
-## Кастомная админка
-
-Возможности встроенной админки очень велики, но её можно дописывать, видоизменять, добавлять любые кастомные действия
-итд. Подробно разберем на одном из следующих занятий, сейчас попробуйте создать/изменить/удалить несколько объектов.
-
-Админку можно кастомизировать, и изменить или добавить любое действие для это используются специальные классы.
-
-Ссылка на оф доку [тут](https://docs.djangoproject.com/en/3.1/ref/contrib/admin/)
-
-Весь функционал, на самом деле, описан в приложении `django.contrib.admin`, о котором мы говорили выше, оно добавлено в
-наш проект по умолчанию.
-
-```python
-from .models import Article
-from django.contrib import admin
-
-
-class ArticleAdmin(admin.ModelAdmin):
-    fields = ('name', 'title', 'create_date')
-
-    def create_date(self, obj):
-        return obj.created
-
-    view_birth_date.empty_value_display = '???'
-
-
-admin.site.register(Article, ArticleAdmin)
+```json
+{
+   "title": "test title",
+   "published_date": "1998-07-02",
+   "id": 3
+}
 ```
 
-## Основные типы филдов, и их стандартные атрибуты.
+## View
 
-[Ссылка на все существующие типы филдов](https://docs.djangoproject.com/en/3.0/ref/models/fields/)
+Знакомимся с самым подробным сайтом по DRF классам [тут](http://www.cdrf.co/)
 
-Когда вы создаёте любую модель, у неё автоматически появляется атрибут `id` он является праймари кеем по умолчанию, если
-это не было переписано явно
+## APIView
 
-Id это очень удобное поле, т.к. оно является автоматическим, и когда вы создаёте новый объект ему сразу назнчается новый
-идентификационный номер, на один больше предыдущего.
+Дока [тут](https://www.django-rest-framework.org/api-guide/views/#class-based-views)
 
-Так же все типы филдов имеют встроенный атрибут default, который заполняется если нужно указать значение по умолчанию
-
-### Boolean field
-
-Хранит True или False
+Также мы можем описать это же через Class-Based View, для этого нам нужно наследоваться от APIView:
 
 ```python
-my_flag = models.BooleanField()
+from myapp.models import Book
+from myapp.serializers import BookSerializer
+from rest_framework.views import APIView
+from rest_framework.response import Response
+from rest_framework import status
+
+
+class BookList(APIView):
+    """
+    List all books, or create a new book.
+    """
+
+    def get(self, request, format=None):
+        books = Book.objects.all()
+        serializer = BookSerializer(books, many=True)
+        return Response(serializer.data)
+
+    def post(self, request, format=None):
+        serializer = BookSerializer(data=request.data)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 ```
 
-### Char field
-
-Строковое поле, принимает обязательный аргумент max_length - максимальное кол-во символов
-
-Часто используемые флаги null и blank, null=True, означает, что поле может быть None, black=True, означает, что поле
-может быть пустой строкой ''
+Вынесем получение объекта в отдельный метод:
 
 ```python
-my_char = models.CharField(max_length=120, null=True, blank=False)
+class BookDetail(APIView):
+    """
+    Retrieve, update or delete a book instance.
+    """
+
+    def get_object(self, pk):
+        try:
+            return Book.objects.get(pk=pk)
+        except Book.DoesNotExist:
+            raise Http404
+
+    def get(self, request, pk, format=None):
+        book = self.get_object(pk)
+        serializer = BookSerializer(book)
+        return Response(serializer.data)
+
+    def put(self, request, pk, format=None):
+        book = self.get_object(pk)
+        serializer = BookSerializer(book, data=request.data)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+    def delete(self, request, pk, format=None):
+        book = self.get_object(pk)
+        book.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
 ```
 
-### Date и DateTime field
-
-Поля для хранения даты, и даты и времени
-
-Принимают аргументы auto_now и auto_now_add, auto_now_add обозначает, что при создании объекта это поле будет
-автоматически заполненное, текущей датой и временем. auto_now будет обновляться каждый раз когда объект сохраняется. (
-часто используют для сохранения даты создания и даты обновления объекта)
+URLs описываются так же, как и для Django Class-Based View:
 
 ```python
-created_at = models.DateField(auto_now=True)
-updated_at = models.DateTimeField(auto_now_add=True)
+urlpatterns = [
+    path('books/', BookList.as_view()),
+    path('books/<int:pk>/', BookDetail.as_view()),
+]
 ```
 
-### Decimal Field
+## GenericView
 
-Хранение float чисел
+По аналогии с классической Django существуют заранее описанные CRUD действия.
 
-Обязательніе параметры max_digits, decimal_places. Первое максимальное кол-во символов, второе кол-во знаков после
-запятой.
+Как это работает?
+
+Существует класс `GenericAPIView`, который наследуется от обычного `APIView`.
+
+В нём описаны такие поля как:
+
+- `queryset` хранит кверисет;
+
+- `serializer_class` хранит сериалайзер;
+
+- `lookup_field = 'pk'` - название атрибута в модели, который будет отвечать за PK;
+
+- `lookup_url_kwarg = None` - название атрибута в запросе, который будет отвечать за `pk`;
+
+- `filter_backends = api_settings.DEFAULT_FILTER_BACKENDS` - фильтры запросов;
+
+- `pagination_class = api_settings.DEFAULT_PAGINATION_CLASS` - пагинация запросов.
+
+И методы:
+
+- `get_queryset` - получение кверисета;
+
+- `get_object` - получение одного объекта;
+
+- `get_serializer` - получение объекта сериалайзера;
+
+- `get_serializer_class` - получение класса сериалайзера;
+
+- `get_serializer_context` - получить контекст сериалайзера;
+
+- `filter_queryset` - отфильтровать кверисет;
+
+- `paginator` - объект пагинации;
+
+- `paginate_queryset` - пагинировать кверисет;
+
+- `get_paginated_response` - получить пагинированый ответ.
+
+*Такой класс не работает самостоятельно, только вместе с определёнными миксинами*
+
+### Миксины
+
+В DRF существует 5 миксинов:
 
 ```python
-    float_number = models.DecimalField(decimal_places=2, max_digits=12)
+class CreateModelMixin(object):
+    """
+    Create a model instance.
+    """
+
+    def create(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        self.perform_create(serializer)
+        headers = self.get_success_headers(serializer.data)
+        return Response(serializer.data, status=status.HTTP_201_CREATED, headers=headers)
+
+    def perform_create(self, serializer):
+        serializer.save()
+
+    def get_success_headers(self, data):
+        try:
+            return {'Location': str(data[api_settings.URL_FIELD_NAME])}
+        except (TypeError, KeyError):
+            return {}
 ```
 
-### EmailField
+Рассмотрим подробнее.
 
-Такой же текстовый как и CharField с проверкой на валидность имейла
+Это миксин, и без сторонних классов этот функционал работать не будет.
 
-### FileField
+При вызове метода `create()` мы предполагаем, что у нас был request.
 
-Для хранения файлов, можно указать upload_to - место для хранения файлов, если не указано, будет использованно, то, что
-в settings.py
+Вызываем метод `get_serializer()` из класса `GenericAPIView` для получения объекта сериалайзера, обратите внимание, что
+данные передаются через атрибут `data`, так как они получены от пользователя. Проверяем данные на валидность (обратите
+внимание на атрибут `raise_exception`, если данные будут не валидны, код сразу вылетит в traceback, а значит нам не
+нужно отдельно прописывать действия при не валидном сериалайзере), вызываем метод `perform_create`, который просто
+сохраняет сериалайзер (вызывает `create` или `update` в зависимости от данных), получает хедеры, и возвращает response
+с 201 кодом, создание успешно.
+
+По аналогии мы можем рассмотреть остальные миксины.
 
 ```python
-    my_file = models.FileField()
+class RetrieveModelMixin(object):
+    """
+    Retrieve a model instance.
+    """
+
+    def retrieve(self, request, *args, **kwargs):
+        instance = self.get_object()
+        serializer = self.get_serializer(instance)
+        return Response(serializer.data)
 ```
 
-### Image Field
-
-Тоже что и файл филд, с валидацией на картинку
-
-### IntegerField
-
-Хранение целых чисел от -2147483648 до 2147483647
+Обратите внимание, метод называется `retrieve()` и внутри вызывает метод `get_object()`, - это миксин одиночного объекта
 
 ```python
-    int_number = models.IntegerField()
+class UpdateModelMixin(object):
+    """
+    Update a model instance.
+    """
+
+    def update(self, request, *args, **kwargs):
+        partial = kwargs.pop('partial', False)
+        instance = self.get_object()
+        serializer = self.get_serializer(instance, data=request.data, partial=partial)
+        serializer.is_valid(raise_exception=True)
+        self.perform_update(serializer)
+
+        if getattr(instance, '_prefetched_objects_cache', None):
+            # If 'prefetch_related' has been applied to a queryset, we need to
+            # forcibly invalidate the prefetch cache on the instance.
+            instance._prefetched_objects_cache = {}
+
+        return Response(serializer.data)
+
+    def perform_update(self, serializer):
+        serializer.save()
+
+    def partial_update(self, request, *args, **kwargs):
+        kwargs['partial'] = True
+        return self.update(request, *args, **kwargs)
 ```
 
-### URL Field
-
-Текстовый тип, для хранения урлов.
+Методы `update()`, `partial_update()`, `perform_update()` нужны для обновления объекта, обратите внимание на атрибут
+`partial`. Помните разницу между PUT и PATCH?
 
 ```python
-    my_url = models.URLField()
+class DestroyModelMixin(object):
+    """
+    Destroy a model instance.
+    """
+
+    def destroy(self, request, *args, **kwargs):
+        instance = self.get_object()
+        self.perform_destroy(instance)
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+    def perform_destroy(self, instance):
+        instance.delete()
 ```
 
-И многие другие, читайте доку.
-
-# Связи
-
-![](http://memesmix.net/media/created/jb8uel.jpg)
-
-Модели могут быть связанны между собой, для этого существует 3 типа связей
-
-OneToOne
-
-ForeignKey
-
-ManyToMany
-
-### One to one
-
-Связь один к одному, чаще всего используется для какого-либо однозначного определения разных моделей (Допустим
-пользователя, и модели где хранятся его настройки)
-
-Для того, что бы сделать связь, нам нужно создать две модели и в одной из них указать зависимость
+Аналогично для удаления методы `destroy()`, `perform_destroy()`.
 
 ```python
-from django.db import models
+class ListModelMixin(object):
+    """
+    List a queryset.
+    """
 
+    def list(self, request, *args, **kwargs):
+        queryset = self.filter_queryset(self.get_queryset())
 
-class Customer(models.Model):
-    name = models.CharField(max_length=120)
-    age = models.IntegerField()
+        page = self.paginate_queryset(queryset)
+        if page is not None:
+            serializer = self.get_serializer(page, many=True)
+            return self.get_paginated_response(serializer.data)
 
-
-class CustomerSettings(models.Model):
-    preferred_color = models.CharField()
-    customer = models.OneToOneField(Customer, on_delete=models.CASCADE, related_name='cus')
+        serializer = self.get_serializer(queryset, many=True)
+        return Response(serializer.data)
 ```
 
-Теперь эти модели связанны, что мы и увидим в админке.
+Метод `list()` получает кверисет, дальше пытается его пагинировать, если получается, возвращает страницу, если нет -
+целый ответ.
 
-### Foreign Key
+*Важно!* Ни в одном из миксинов не было методов `get()`,`post()`,`patch()`,`put()` или `delete()`, почему?
 
-Самая распространенная связь. Один ко многим. Допустим у нас есть книга, её написал конкретный автор, но это не значит,
-что этот автор написал только эту книгу.
+Потому что их вызов перенесен в дополнительные классы.
+
+### Generic классы
+
+Вот так выглядят классы, которые уже можно использовать. Как это работает? Эти классы наследуют логику работы с данными
+из необходимого миксина, общие методы, которые актуальны для любого CRUD действия из `GenericAPIView` дальше описываем
+методы тех видов запросов, которые мы хотим обрабатывать, в которых просто вызываем необходимый метод из миксина.
+
+**Переписываются методы `create()`, `destroy()` и т. д., а не `get()`, `post()`!**
 
 ```python
-class Author(models.Model):
-    name = models.CharField(max_length=120)
+class CreateAPIView(mixins.CreateModelMixin,
+                    GenericAPIView):
+    """
+    Concrete view for creating a model instance.
+    """
 
-
-class Book(models.Model):
-    name = models.CharField(max_length=120)
-    year_of_public = models.DateField()
-    author = models.ForeignKey(Author, on_delete=models.CASCADE, related_name='books')
+    def post(self, request, *args, **kwargs):
+        return self.create(request, *args, **kwargs)
 
 ```
-
-### Many to Many
-
-Многие ко многим, допустим вы описываете базу для кинопоиска, один фильм может быть снят несколькими режиссерами, но при
-этом каждый из режиссеров может снять больше одного фильма, такая связь называется ManyToMany Для построения таких
-связей мы используем связь ManyToMany:
 
 ```python
-from django.db import models
+class ListAPIView(mixins.ListModelMixin,
+                  GenericAPIView):
+    """
+    Concrete view for listing a queryset.
+    """
 
-
-class Publication(models.Model):
-    title = models.CharField(max_length=30)
-
-    class Meta:
-        ordering = ['title']
-
-    def __str__(self):
-        return self.title
-
-
-class Article(models.Model):
-    headline = models.CharField(max_length=100)
-    publications = models.ManyToManyField(Publication)
-
-    class Meta:
-        ordering = ['headline']
-
-    def __str__(self):
-        return self.headline
+    def get(self, request, *args, **kwargs):
+        return self.list(request, *args, **kwargs)
 ```
-
-На самом деле "Под капотом" создаётся дополнительная таблица которая хранит информацию о связи между двумя видами
-моделей.
-
-Если нам нужно контролировать эту таблицу, мы можем делать это при помощи специального слова ```through```
 
 ```python
-from django.db import models
+class RetrieveAPIView(mixins.RetrieveModelMixin,
+                      GenericAPIView):
+    """
+    Concrete view for retrieving a model instance.
+    """
 
-
-class Person(models.Model):
-    name = models.CharField(max_length=128)
-
-    def __str__(self):
-        return self.name
-
-
-class Group(models.Model):
-    name = models.CharField(max_length=128)
-    members = models.ManyToManyField(Person, through='Membership')
-
-    def __str__(self):
-        return self.name
-
-
-class Membership(models.Model):
-    person = models.ForeignKey(Person, on_delete=models.CASCADE)
-    group = models.ForeignKey(Group, on_delete=models.CASCADE)
-    date_joined = models.DateField()
-    invite_reason = models.CharField(max_length=64)
+    def get(self, request, *args, **kwargs):
+        return self.retrieve(request, *args, **kwargs)
 ```
 
-## ContentTypes
+```python
+class DestroyAPIView(mixins.DestroyModelMixin,
+                     GenericAPIView):
+    """
+    Concrete view for deleting a model instance.
+    """
 
-На самом деле существуют более сложные конструкции, например фреймворк `ContentType`, который позволяет, делать
-зависимость полей динамической (Допустим сделать лайк зависимым от динамического типа данных, например, хочешь ставить к
-статье, а хочешь к комментарию, хотя это одна и та же модель)
+    def delete(self, request, *args, **kwargs):
+        return self.destroy(request, *args, **kwargs)
+```
 
-Дока [Тут](https://docs.djangoproject.com/en/3.1/ref/contrib/contenttypes/)
+```python
+class UpdateAPIView(mixins.UpdateModelMixin,
+                    GenericAPIView):
+    """
+    Concrete view for updating a model instance.
+    """
 
-Подробно мы не будем рассматривать этот функционал, но я бы очень рекомендовал ознакомиться.
+    def put(self, request, *args, **kwargs):
+        return self.update(request, *args, **kwargs)
 
-Работает основываясь на приложении `django.conrib.contenttype`, добавленное в наш проект по умолчанию.
+    def patch(self, request, *args, **kwargs):
+        return self.partial_update(request, *args, **kwargs)
+```
 
-![](https://lendiplompro.ru/images/praktica/praktica.jpg)
+```python
+class ListCreateAPIView(mixins.ListModelMixin,
+                        mixins.CreateModelMixin,
+                        GenericAPIView):
+    """
+    Concrete view for listing a queryset or creating a model instance.
+    """
 
-# Домашнее задание / Практика:
+    def get(self, request, *args, **kwargs):
+        return self.list(request, *args, **kwargs)
 
-1. Разрабатываем каталог книг, у каждой книги обязательно есть автор, и он может быть только один.
+    def post(self, request, *args, **kwargs):
+        return self.create(request, *args, **kwargs)
+```
 
-2. Разработать книжную библиотеку. Храним книги, храним авторов, книгу могут написать несколько соавторов. храним кто
-   брал книги, и доступна ли книга сейчас.
+```python
+class RetrieveUpdateAPIView(mixins.RetrieveModelMixin,
+                            mixins.UpdateModelMixin,
+                            GenericAPIView):
+    """
+    Concrete view for retrieving, updating a model instance.
+    """
 
-3. Разработать набор моделей, для сайта-блога, на котором можно выставлять свои статьи, комментировать чужие, ставить
-   лайк и дизлайк статье, и комментарию.
+    def get(self, request, *args, **kwargs):
+        return self.retrieve(request, *args, **kwargs)
 
-3.1* Доделать так, что бы связи позволяли комментировать комментарии.
+    def put(self, request, *args, **kwargs):
+        return self.update(request, *args, **kwargs)
 
-3.2* Сделать лайки через GenericForeignKey
+    def patch(self, request, *args, **kwargs):
+        return self.partial_update(request, *args, **kwargs)
+```
+
+```python
+class RetrieveDestroyAPIView(mixins.RetrieveModelMixin,
+                             mixins.DestroyModelMixin,
+                             GenericAPIView):
+    """
+    Concrete view for retrieving or deleting a model instance.
+    """
+
+    def get(self, request, *args, **kwargs):
+        return self.retrieve(request, *args, **kwargs)
+
+    def delete(self, request, *args, **kwargs):
+        return self.destroy(request, *args, **kwargs)
+```
+
+```python
+class RetrieveUpdateDestroyAPIView(mixins.RetrieveModelMixin,
+                                   mixins.UpdateModelMixin,
+                                   mixins.DestroyModelMixin,
+                                   GenericAPIView):
+    """
+    Concrete view for retrieving, updating or deleting a model instance.
+    """
+
+    def get(self, request, *args, **kwargs):
+        return self.retrieve(request, *args, **kwargs)
+
+    def put(self, request, *args, **kwargs):
+        return self.update(request, *args, **kwargs)
+
+    def patch(self, request, *args, **kwargs):
+        return self.partial_update(request, *args, **kwargs)
+
+    def delete(self, request, *args, **kwargs):
+        return self.destroy(request, *args, **kwargs)
+```
+
+Допустим, мы хотим описать класс при GET запросе получение списка комментариев, в которых есть буква `w`, если у нас уже
+есть сериалайзер и модель, а при POST создание комментария.
+
+```python
+class CommentListView(ListCreateAPIView):
+    queryset = Comment.objects.all()
+    serializer_class = CommentSerializer
+
+    def get_queryset(self):
+        return super().get_queryset().filter(text__icontains='w')
+```
+
+Всё, этого достаточно.
+
+## ViewSet
+
+Дока [тут](https://www.django-rest-framework.org/api-guide/viewsets/)
+
+Классы, которые отвечают за поведение нескольких запросов, и отличаются друг от друга только методом, называются
+`ViewSet`.
+
+Они на самом деле описывают методы, для получения списка действий (list, retrieve, и т. д.), и преобразования их в URLs
+(об этом дальше).
+
+Например:
+
+```python
+from django.contrib.auth.models import User
+from django.shortcuts import get_object_or_404
+from myapps.serializers import UserSerializer
+from rest_framework import viewsets
+from rest_framework.response import Response
+
+
+class UserViewSet(viewsets.ViewSet):
+    """
+    A simple ViewSet for listing or retrieving users.
+    """
+
+    def list(self, request):
+        queryset = User.objects.all()
+        serializer = UserSerializer(queryset, many=True)
+        return Response(serializer.data)
+
+    def retrieve(self, request, pk=None):
+        queryset = User.objects.all()
+        user = get_object_or_404(queryset, pk=pk)
+        serializer = UserSerializer(user)
+        return Response(serializer.data)
+```
+
+Разные действия при наличии и отсутствии `PK`, при `GET` запросе.
+
+Для описания URLs можно использовать разное описание:
+
+```python
+user_list = UserViewSet.as_view({'get': 'list'})
+user_detail = UserViewSet.as_view({'get': 'retrieve'})
+```
+
+Хоть так никто и не делает, об этом дальше.
+
+## ModelViewSet и ReadOnlyModelViewSet
+
+Дока [тут](https://www.django-rest-framework.org/api-guide/viewsets/#modelviewset)
+
+Объединяем всё, что мы уже знаем.
+
+И получаем класс `ModelViewSet`, он наследуется от `GenericViewSet` (`ViewSet` + `GenericAPIView`) и всех 5 миксинов, а
+значит там описаны методы `list()`, `retrieve()`, `create()`, `update()`, `destroy()`, `perform_create()`,
+`perform_update()` и т. д.
+
+А значит мы можем описать сущность, которая принимает модель и сериалайзер, и уже может принимать любые типы запросов и
+выполнять любые CRUD действия. Мы можем их переопределить, или дописать еще экшенов, всё что нам может быть необходимо
+уже есть.
+
+Пример:
+
+```python
+class AccountViewSet(viewsets.ModelViewSet):
+    """
+    A simple ViewSet for viewing and editing accounts.
+    """
+    queryset = Account.objects.all()
+    serializer_class = AccountSerializer
+    permission_classes = [IsAccountAdminOrReadOnly]
+```
+
+Или если необходим такой же вьюсет только для получения объектов, то:
+
+```python
+class AccountViewSet(viewsets.ReadOnlyModelViewSet):
+    """
+    A simple ViewSet for viewing accounts.
+    """
+    queryset = Account.objects.all()
+    serializer_class = AccountSerializer
+```
+
+На самом деле, можно собрать такой же вьюсет для любых действий, добавляя и убирая миксины.
+
+Например:
+
+```python
+from rest_framework import mixins
+
+
+class CreateListRetrieveViewSet(mixins.CreateModelMixin,
+                                mixins.ListModelMixin,
+                                mixins.RetrieveModelMixin,
+                                viewsets.GenericViewSet):
+    """
+    A viewset that provides `retrieve`, `create`, and `list` actions.
+
+    To use it, override the class and set the `.queryset` and
+    `.serializer_class` attributes.
+    """
+    pass
+```
+
+Чаще всего используются обычные `ModelViewSet`.
+
+### Пагинация
+
+Дока [тут](https://www.django-rest-framework.org/api-guide/pagination/)
+
+Как мы помним, для действия `list` используется пагинация. Как это работает?
+
+Если у нас нет необходимости настраивать все вьюсеты отдельно, то мы можем указать такую настройку в `settings.py`:
+
+```python
+REST_FRAMEWORK = {
+    'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.LimitOffsetPagination',
+    'PAGE_SIZE': 100
+}
+```
+
+Там мы можем указать тип класса пагинации и размер одной страницы, и все наши запросы уже будут пагинированы.
+
+Также мы можем создать классы пагинаторов, основываясь на нашей необходимости.
+
+```python
+class LargeResultsSetPagination(PageNumberPagination):
+    page_size = 1000
+    page_size_query_param = 'page_size'
+    max_page_size = 10000
+
+
+class StandardResultsSetPagination(PageNumberPagination):
+    page_size = 100
+    page_size_query_param = 'page_size'
+    max_page_size = 1000
+```
+
+Если нужно указать пагинатор у конкретного вьюсета, то можно это сделать прямо в атрибутах.
+
+```python
+class BillingRecordsView(generics.ListAPIView):
+    queryset = Billing.objects.all()
+    serializer_class = BillingRecordsSerializer
+    pagination_class = LargeResultsSetPagination
+```
+
+## Декоратор @action
+
+Дока [тут](https://www.django-rest-framework.org/api-guide/viewsets/#marking-extra-actions-for-routing)
+
+Что делать, если вам нужно дополнительное действие, связанное с деталями вашей вью, но ни один из крудов не походит? Тут
+можно использовать декоратор `@action`, чтобы описать новое действие в этом же вьюсете.
+
+```python
+from django.contrib.auth.models import User
+from rest_framework import status, viewsets
+from rest_framework.decorators import action
+from rest_framework.response import Response
+from myapp.serializers import UserSerializer, PasswordSerializer
+
+
+class UserViewSet(viewsets.ModelViewSet):
+    """
+    A viewset that provides the standard actions
+    """
+    queryset = User.objects.all()
+    serializer_class = UserSerializer
+
+    @action(detail=True, methods=['post'])
+    def set_password(self, request, pk=None):
+        user = self.get_object()
+        serializer = PasswordSerializer(data=request.data)
+        if serializer.is_valid():
+            user.set_password(serializer.data['password'])
+            user.save()
+            return Response({'status': 'password set'})
+        else:
+            return Response(serializer.errors,
+                            status=status.HTTP_400_BAD_REQUEST)
+
+    @action(detail=False)
+    def recent_users(self, request):
+        recent_users = self.get_queryset().order_by('-last_login')
+
+        page = self.paginate_queryset(recent_users)
+        if page is not None:
+            serializer = self.get_serializer(page, many=True)
+            return self.get_paginated_response(serializer.data)
+
+        serializer = self.get_serializer(recent_users, many=True)
+        return Response(serializer.data)
+```
+
+Принимает два основных параметра: `detail` описывает должен ли этот action принимать PK (действие над всеми объектами
+или над одним конкретным), и `methods` - список HTTP методов, на которые должен срабатывать `action`.
+
+Есть и другие, например, классы permissions или имя.
+
+## Роутеры
+
+Дока [тут](https://www.django-rest-framework.org/api-guide/routers/)
+
+Роуте - это автоматический генератор URLs для вьюсетов.
+
+```python
+from rest_framework import routers
+
+router = routers.SimpleRouter()
+router.register(r'users', UserViewSet)
+router.register(r'accounts', AccountViewSet)
+urlpatterns = router.urls
+```
+
+В методе `register` принимает два параметра, на каком слове основывать URLs и для какого вьюсета.
+
+Если у вьюсета нет параметра `queryset`, то нужно указать поле `basename`, если нет, то автоматически будет использовано
+имя модели маленькими буквами.
+
+URLs будут сгенерированы автоматически, и им будут автоматически присвоены имена:
+
+```
+URL pattern: ^users/$ Name: 'user-list'
+URL pattern: ^users/{pk}/$ Name: 'user-detail'
+URL pattern: ^accounts/$ Name: 'account-list'
+URL pattern: ^accounts/{pk}/$ Name: 'account-detail'
+```
+
+Чаще всего роутеры к URLs добавляются вот такими способами:
+
+```python
+urlpatterns = [
+    path('forgot-password', ForgotPasswordFormView.as_view()),
+    path('api/', include(router.urls)),
+]
+```
+
+### Роутинг экстра экшенов
+
+Допустим, есть такой экстра экшен:
+
+```python
+from rest_framework.decorators import action
+
+
+class UserViewSet(ModelViewSet):
+    ...
+
+    @action(methods=['post'], detail=True)
+    def set_password(self, request, pk=None):
+        ...
+```
+
+Роутер автоматически сгенерирует URL `^users/{pk}/set_password/$` и имя `user-set-password`.
+
+Класс `SimpleRouter` может принимать параметр `trailing_slash=False` True или False, по дефолту True, поэтому все API,
+должны принимать URLs заканчивающиеся на `/`, если указать явно, то будет принимать всё без `/`.

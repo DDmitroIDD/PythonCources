@@ -1,445 +1,925 @@
-# Урок 35. Middlewares. Signals. Messages
+# Лекция 35. Сокеты. Django channels.
 
-## Middlewares
+![](https://www.imaginarycloud.com/blog/content/images/2016/03/gifmachine-2.gif)
 
-![](https://memegenerator.net/img/instances/81631865.jpg)
+## Протокол
 
-Дока [Тут](https://docs.djangoproject.com/en/3.1/topics/http/middleware/)
+### Реализация чата
 
-Мы с вами рассмотрели основные этапы того какие этапы должен пройти реквест на всём пути нашей реквест-респонс системы,
-но на самом деле каждый реквест проходит кучу дополнительных обработок таких как мидлвары, причём каждый реквест делает
-это дважды, при "входе" и при "выходе".
+Допустим вы хотите реализовать на своём сайте чат. Вы знаете протокол HTTP, который подразумевает систему запрос-ответ.
 
-Если открыть файл `settings.py` то там можно обнаружить переменную `MIDDLEWARES`, или `MIDDLEWARE_CLASSES` (Для старых
-версий Django)
+Но что делать если вам необходимо обновить информацию у клиента, хотя он её не запрашивал (Вам пишут сообщение, но вы не
+знаете когда именно оно будет написано)
 
-Которая выглядит примерно вот так:
+Какие существуют варианты решения этой проблемы?
 
-```python
-MIDDLEWARE = [
-    'django.middleware.security.SecurityMiddleware',
-    'django.contrib.sessions.middleware.SessionMiddleware',
-    'django.middleware.common.CommonMiddleware',
-    'django.middleware.csrf.CsrfViewMiddleware',
-    'django.contrib.auth.middleware.AuthenticationMiddleware',
-    'django.contrib.messages.middleware.MessageMiddleware',
-    'django.middleware.clickjacking.XFrameOptionsMiddleware',
+#### Множество запросов
+
+Мы можем делать большое кол-во запросов в надежде, что уже кто-то прислал нам сообщение
+
+![](https://djangoalevel.s3.eu-central-1.amazonaws.com/lesson44/lots_requests.png)
+
+Чем плох такой подход?
+
+Мы отправляем огромное кол-во запросов в "пустоту", расходуя ресурсы и выполняя не нужные запросы.
+
+#### Длинное соединение (long polling)
+
+Мы можем отдавать ответ только когда сообщение пришло.
+
+![](https://djangoalevel.s3.eu-central-1.amazonaws.com/lesson44/long_polling.png)
+
+Как это реализовать? Например, в коде можно использовать вечный цикл, и опрос какого либо хранилища, например `redis`.
+Если данные появились, отдавать ответ.
+
+Чем плох такой подход?
+
+"Пустые" HTTP запросы заменяются на "пустые" запросы к хранилищу данных, что ничем особо не лучше, мы всё еще тратим
+большое кол-во ресурсов. Большинство серверов и браузеров имеют ограничение на время запроса, что тоже является
+проблемой для такого подхода.
+
+#### Сокеты
+
+Сокет это специальный вид соединения поверх HTTP, для создания постоянного соединения.
+
+Как это работает?
+
+![](https://www.pubnub.com/wp-content/uploads/2013/09/WebSockets2.png)
+
+Клиент отправляет запрос на соединение с сокетом сервера.
+
+Сервер принимает это соединение.
+
+Клиент шлёт сообщение серверу.
+
+Сервер рассылает это сообщение другим клиентам.
+
+В любой момент обе стороны могут разорвать соединение если это необходимо.
+
+Запросы для сокетов проходят по протоколу WebSocket и выполняются на адреса, которые начинаются с `ws://`, а
+не `http://`
+
+![](https://djangoalevel.s3.eu-central-1.amazonaws.com/lesson44/socket.png)
+
+### Сфера применения
+
+Где стоит применять веб сокеты? Основные сферы применения:
+
+- Чаты
+
+- Приложения реального времени (Например отображение курса валют, стоимости криптовалют итд.)
+
+- IoT приложения (IoT - Internet of Things, интернет вещей, любые смарт предметы. Смарт-чайники, телевизоры, датчики
+  дыма, кофе машины итд.)
+
+- Онлайн игры
+
+Но если необходимо, то можно применять где угодно.
+
+## Django channels
+
+Естественно для Python существует готовый пакет для поддержки этого протокола с поддержкой Django
+
+[Дока](https://channels.readthedocs.io/en/stable/)
+
+Устанавливается через `pip`
+
+```pip install channels```
+
+### Туториал
+
+Давайте напишем простой чат при помощи Django
+
+Создаём виртуальное окружение, устанавливаем django и channels, создаём джанго проект
+
+```django-admin startproject chatsite```
+
+Получим такую структуру:
+
+```
+chatsite/
+    manage.py
+    chatsite/
+        __init__.py
+        asgi.py
+        settings.py
+        urls.py
+        wsgi.py
+```
+
+Если вы используете версию django 2.2, то у вас не будет файла `asgi.py`, а он нам будет нужен. Не переживайте, мы его
+создадим.
+
+Файлы `wsgi.py` и `asgi.py` необходимы для запуска серверов, `wsgi` - синхронных, `asgi` - асинхронных. Веб сокет это
+асинхронная технология.
+
+Создадим приложение для чата
+
+```python3 manage.py startapp chat```
+
+Получим примерно такую структуру файлов:
+
+```
+chat/
+    __init__.py
+    admin.py
+    apps.py
+    migrations/
+        __init__.py
+    models.py
+    tests.py
+    views.py
+```
+
+Для простоты, предлагаю удалить всё кроме `views.py` и `__init__.py`
+
+Полученная структура:
+
+```
+chat/
+    __init__.py
+    views.py
+```
+
+Добавляем наше приложение в `INSTALLED_APPS` в `settings.py`
+
+```
+# chatsite/settings.py
+INSTALLED_APPS = [
+    'chat',
+    'django.contrib.admin',
+    'django.contrib.auth',
+    'django.contrib.contenttypes',
+    'django.contrib.sessions',
+    'django.contrib.messages',
+    'django.contrib.staticfiles',
 ]
 ```
 
-Каждая из этих строк, это отдельная мидлварина, и абсолютно **каждый** реквест проходит через код описанный в этих
-файлах, например `django.contrib.auth.middleware.AuthenticationMiddleware` отвечает за то, что бы в нашем реквесте
-всегда был пользователь если он залогинен, а `django.middleware.csrf.CsrfViewMiddleware` отвечает за проверку наличия и
-правильности CSRF токена, которые мы рассматривали ранее.
+Создадим папку `templates`, добавим её в `settigns.py`
 
-Причём при "входе" реквест будет проходить сверху вниз (Сначала секьюрити, потом сессии итд), а при "выходе" снизу
-вверх (начиная с XFrame, заканчивая Security)
-
-**Мидлвар это по своей сути это декоратор над реквестом**
-
-### Как этим пользоваться?
-
-Если мы хотим использовать самописные мидлвары, мы должны понимать как они работают.
-
-Можно описать мидлвар двумя способами функциональным и основанным на классах, рассмотрим оба:
-
-Функционально:
-
-```python
-def simple_middleware(get_response):
-    # One-time configuration and initialization.
-
-    def middleware(request):
-        # Code to be executed for each request before
-        # the view (and later middleware) are called.
-
-        response = get_response(request)
-
-        # Code to be executed for each request/response after
-        # the view is called.
-
-        return response
-
-    return middleware
-```
-
-Как вы можете заметить синтаксис очень близок к декораторам.
-
-`get_response` - функция, которая отвечает за всё что происходит мне мидлвары и отвечает за обработку запроса, по сути
-это будет наша `view`, а мы можем дописать любой нужный нам код, до или после, соответственно на "входе" реквеста или
-на "выходе" респонса.
-
-Так почти никто не пишет :) рассмотрим как этот же функционал работает для классов:
-
-```python
-class SimpleMiddleware:
-    def __init__(self, get_response):
-        self.get_response = get_response
-        # One-time configuration and initialization.
-
-    def __call__(self, request):
-        # Code to be executed for each request before
-        # the view (and later middleware) are called.
-
-        response = self.get_response(request)
-
-        # Code to be executed for each request/response after
-        # the view is called.
-
-        return response
-```
-
-При таком подходе функционал работает при помощи меджик методов, функционально выполняет то же самое, но по моему
-личному мнению гораздо элегантнее.
-
-При инициализации, мы получаем обработчик, а при выполнении вызываем его же, но с возможностью добавить нужный код до
-или после.
-
-Что бы активировать мидлвар нам необходимо дописать путь к нему, в переменную `MIDDLEWARES` в `settings.py`.
-
-Допустим, если мы создали файл `middlewares.py` в приложении под названием `main` и в этом файле создали
-класс `CheckUserStatus` который нужен, что бы мы могли обработать какой-либо статус пользователя, нужно дописать в
-переменную этот класс:
-
-```python
-MIDDLEWARE = [
-    'django.middleware.security.SecurityMiddleware',
-    'django.contrib.sessions.middleware.SessionMiddleware',
-    'django.middleware.common.CommonMiddleware',
-    'django.middleware.csrf.CsrfViewMiddleware',
-    'django.contrib.auth.middleware.AuthenticationMiddleware',
-    'main.middlewares.CheckUserStatus',  # Новый мидлвар
-    'django.contrib.messages.middleware.MessageMiddleware',
-    'django.middleware.clickjacking.XFrameOptionsMiddleware',
-]
-```
-
-Обратите внимание я добавил мидлвар после `django.contrib.auth.middleware.AuthenticationMiddleware` так как до этого
-мидлвара в нашем реквесте нет переменной юзер.
-
-## Миксин для мидлвар
-
-На самом деле для написания мидлвар существует миксин, что бы упростить наш код.
-
-```python
-django.utils.deprecation.MiddlewareMixin
-```
-
-В нём уже расписаны методы `__init__` и `__call__`
-
-Инит принимает метод для обработки реквеста, а в вызове расписаны методы для обработки ревеста или респонса.
-
-Метод колл вызывает 4 действия:
-
-1. Вызывает `self.process_request(request)` (Если описан) для обработки ревекста.
-2. Вызывает `self.get_response(request)` что бы получить респонс для дальнейшего использования.
-3. Вызывает `self.process_response(request, response)` (Если описан) для обработки респонса.
-4. Возвращает респонс
-
-Зачем это нужно?
-
-Что бы описывать только тот функционал который мы будем использовать, и случайно не зацепить, что-то рядом.
-
-Например так выглядит миддлвар для добавления юзера в реквест.
-
-```python
-from django.contrib import auth
-from django.utils.deprecation import MiddlewareMixin
-from django.utils.functional import SimpleLazyObject
-
-
-def get_user(request):
-    if not hasattr(request, '_cached_user'):
-        request._cached_user = auth.get_user(request)
-    return request._cached_user
-
-
-class AuthenticationMiddleware(MiddlewareMixin):
-    def process_request(self, request):
-        assert hasattr(request, 'session'), (
-            "The Django authentication middleware requires session middleware "
-            "to be installed. Edit your MIDDLEWARE setting to insert "
-            "'django.contrib.sessions.middleware.SessionMiddleware' before "
-            "'django.contrib.auth.middleware.AuthenticationMiddleware'."
-        )
-        request.user = SimpleLazyObject(lambda: get_user(request))
-```
-
-Всё что тут описано, это что делать при реквесте, добавить реквесту юзера, информация о котором как мы помним, хранится
-в сессии.
-
-## Signals
-
-Сигналы. Часто мы оказываемся к ситуации когда нам нужно выполнять какие-либо действия до\после какого-то определённого
-события, мы конечно можем прописать код там где нам нужно, но вместо этого ммы можем использоваться сигналы.
-
-Сигналы отлавливают что определённое действие выполнено или будет следующим, и выполняет необходимый нам код.
-
-Список экшенов [тут](https://docs.djangoproject.com/en/3.1/ref/signals/).
-Описание [тут](https://docs.djangoproject.com/en/3.1/topics/signals/).
-
-Примеры сигналов:
-
-```
-django.db.models.signals.pre_save & django.db.models.signals.post_save # Выполняется перед сохраннием или сразу после сохранения объекта
-django.db.models.signals.pre_delete & django.db.models.signals.post_delete # Выполняется перед удалением или сразу после удаления объекта
-django.db.models.signals.m2m_changed # Выполняется при изменении любых мэни ту мени связей (добавили студента в группу или убрали, например)
-django.core.signals.request_started & django.core.signals.request_finished # Выполняется при начале запроса, или при тего завершении.
-```
-
-Это далеко не полный список действий на которые могут реагировать сигналы.
-
-Каждый сигнал имеет функции `connect` и `disconnect` для того что бы привязать\отвязать к действию сигнал
-
-```python
-from django.core.signals import request_finished
-
-request_finished.connect(my_callback)
-```
-
-где `my_callback` это функция, которую нужно выполнять по получению сигнала.
-
-Но гораздо чаще применяется синтаксис с использованием декоратора `receiver`
-
-```python
-from django.core.signals import request_finished
-from django.dispatch import receiver
-
-
-@receiver(request_finished)
-def my_callback(sender, **kwargs):
-    print("Request finished!")
-```
-
-У сигнала есть параметр `receiver` и может быть параметр `sender`, сендер, это объект который отправляет сигнал,
-например модель, для которой описывается сигнал.
-
-```python
-from django.db.models.signals import pre_save
-from django.dispatch import receiver
-from myapp.models import MyModel
-
-
-@receiver(pre_save, sender=MyModel)
-def my_handler(sender, **kwargs):
-    ...
-```
-
-Сигнал можно создать под любое действие если это необходимо. Допустим нужно отправить сигнал, что пицца готова.
-
-Сначала создадим сигнал.
-
-```python
-import django.dispatch
-
-pizza_done = django.dispatch.Signal()
-```
-
-И в нужном месте можно отправить
-
-```python
-class PizzaStore:
-    ...
-
-    def send_pizza(self, toppings, size):
-        pizza_done.send(sender=self.__class__, toppings=toppings, size=size)
-        ...
-```
-
-## Messages
-
-Дока [тут](https://docs.djangoproject.com/en/3.1/ref/contrib/messages/)
-
-Довольно часто в веб-приложениях вам необходимо отображать одноразовое уведомление для пользователя после обработки
-формы или некоторых других типов пользовательского ввода ("Вы успешно зарегистрировались", "Скидка активирована",
-"Недостаточно бонусов").
-
-Для этого Django обеспечивает полную поддержку обмена сообщениями на основе файлов cookie и сеансов как для анонимных,
-так и для аутентифицированных пользователей.
-
-Инфраструктура сообщений позволяет вам временно хранить сообщения в одном запросе и извлекать их для отображения в
-следующем запросе (обычно в следующем).
-
-Каждое сообщение имеет определенный уровень, который определяет его приоритет (например, информация, предупреждение или
-ошибка).
-
-### Подключение
-
-По дефолту, если проект был создан через `django-admin` то `messages` изначально подключены.
-
-`django.contrib.messages` должны быть в `INSTALLED_APPS`.
-
-В переменной `MIDDLEWARE` должны быть `django.contrib.sessions.middleware.SessionMiddleware`
-and `django.contrib.messages.middleware.MessageMiddleware`.
-
-По дефолту данные сообщений хранятся в сессии, это является причиной почему мидлвар для сессий должен быть подключен.
-
-В переменной `context_processors` в переменной `TEMPLATES` должны
-содержаться `django.contrib.messages.context_processors.messages`
-
-#### context_processors
-
-Ключ в переменной `OPTIONS` в переменной `TEMPLATES`, отвечает за то, что по дефолту будет присутствовать как переменная
-во всех наших темплейтах, изначально выглядит вот так:
-
-```python
-'context_processors': [
-    'django.template.context_processors.debug',
-    'django.template.context_processors.request',
-    'django.contrib.auth.context_processors.auth',
-    'django.contrib.messages.context_processors.messages',
-]
-```
-
-`django.template.context_processors.debug` - Если в `settings.py` переменная `DEBUG`==`True` добавляет в темплейт
-информацию о подробностях, если произошла ошибка
-
-`django.template.context_processors.request` - Добавляет в контекст данные из реквеста, переменная `request`.
-
-`django.contrib.auth.context_processors.auth` - Добавляет переменную `user` с информацией о пользователе.
-
-`django.contrib.messages.context_processors.messages` - Добавляет сообщения на страницу.
-
-### Storage backends
-
-Хранить сообщения можно в разных местах.
-
-По дефолту существует три варианта хранения:
-
-`class storage.session.SessionStorage` - Хранение в сессии
-
-`class storage.cookie.CookieStorage` - Хранение в куке
-
-`class storage.fallback.FallbackStorage` - Пытаемся хранить в куке, если не помещается используем сессию. Будет
-использовано, по умолчанию.
-
-Если нужно изменить, добавте в `settings.py` переменную:
-
-```python
-MESSAGE_STORAGE = 'django.contrib.messages.storage.cookie.CookieStorage'
-```
-
-Если нужно написать свой класс для хранения сообщений то нужно наследоваться от `class storage.base.BaseStorage` и
-описать 2 метода `_get` и `_store`
-
-### Как этим пользоваться
-
-Во view, необходимо добавить сообщение.
-
-Это можно сделать несколькими способами:
-
-#### add_message
-
-```python
-from django.contrib import messages
-
-messages.add_message(request, messages.INFO, 'Hello world.')
-```
-
-Метод `add_message` позволяет добавить сообщение к реквесту, принимает сам реквест, тип сообщения (успех, провал
-информация итд.), и сам текст сообщения. На самом деле второй параметр это просто цифра, а текст добавлен для чтения.
-
-Чаще всего используется в методах **form_valid**, **form_invalid**
-
-#### Сокращенные методы
-
-```python
-messages.debug(request, '%s SQL statements were executed.' % count)
-messages.info(request, 'Three credits remain in your account.')
-messages.success(request, 'Profile details updated.')
-messages.warning(request, 'Your account expires in three days.')
-messages.error(request, 'Document deleted.')
-```
-
-Эти 5 типов сообщений являются стандартными, но если необходимо, всегда можно добавить свои типы, как это сделать
-описано в доке.
-
-### Как отобразить
-
-Контекст процессор, который находится в настройках уже добавляет нам в темплейт переменную `messages`, а дальше мы можем
-использовать классические темплейт теги
-
-Примеры:
+Создадим файл `index.html` в папке `templates`:
 
 ```html
-{% if messages %}
-<ul class="messages">
-    {% for message in messages %}
-    <li
-            {% if message.tags %} class="{{ message.tags }}" {% endif %}>{{ message }}
-    </li>
-    {% endfor %}
-</ul>
-{% endif %}
+<!-- templates/index.html -->
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8"/>
+    <title>Chat Rooms</title>
+</head>
+<body>
+What chat room would you like to enter?<br>
+<input id="room-name-input" type="text" size="100"><br>
+<input id="room-name-submit" type="button" value="Enter">
+
+<script>
+    document.querySelector('#room-name-input').focus();
+    document.querySelector('#room-name-input').onkeyup = function (e) {
+        if (e.keyCode === 13) {  // enter, return
+            document.querySelector('#room-name-submit').click();
+        }
+    };
+
+    document.querySelector('#room-name-submit').onclick = function (e) {
+        var roomName = document.querySelector('#room-name-input').value;
+        window.location.pathname = '/chat/' + roomName + '/';
+    };
+</script>
+</body>
+</html>
 ```
+
+Что будет на этой странице?
+
+Поле для ввода и кнопка войти. Это будет возможность зайти в конкретный чат, по его названию.
+
+Что делает JS?
+
+При заходе на страницу сразу выделяет поле для ввода имени чата.
+
+Если на инпуте нажимается энтер на клавиатуре, то имитируем нажатие на кнопку входа.
+
+При нажатии на кнопку входа, берем значение из инпута и переходим на страницу `/chat/<значение импута>/` - этой страницы
+пока не существует.
+
+Создадим view для этой страницы.
+
+```python
+from django.views.generic import TemplateView
+
+
+class Index(TemplateView):
+    template_name = 'index.html'
+```
+
+Создадим файл с урлами внутри приложения:
+
+```
+chat/
+    __init__.py
+    urls.py
+    views.py
+```
+
+```python
+# chat/urls.py
+from django.urls import path
+
+from chat.views import Index
+
+urlpatterns = [
+    path('', Index.as_view(), name='index'),
+]
+```
+
+А в основных урлах
+
+```
+# chatsite/urls.py
+from django.conf.urls import include
+from django.urls import path
+from django.contrib import admin
+
+urlpatterns = [
+    path('chat/', include('chat.urls')),
+]
+```
+
+Теперь если мы запустим сервер, то увидим в консоли, что-то такое:
+
+```
+Performing system checks...
+
+System check identified no issues (0 silenced).
+
+You have 18 unapplied migration(s). Your project may not work properly until you apply the migrations for app(s): admin, auth, contenttypes, sessions.
+Run 'python manage.py migrate' to apply them.
+October 21, 2020 - 18:49:39
+Django version 3.1.2, using settings 'mysite.settings'
+Starting development server at http://127.0.0.1:8000/
+Quit the server with CONTROL-C.
+```
+
+А если зайти на страницу http://127.0.0.1:8000/chat/ то будет вот так:
+
+![](https://djangoalevel.s3.eu-central-1.amazonaws.com/lesson44/chat_enter.png)
+
+Попытка перейти на любую страницу ни к чему не приведёт, страницы комнаты пока просто нет :)
+
+### Настройка Channels
+
+Для настройки, необходимо изменить файл `asgi.py`, если его нет, то создать его.
+
+```python
+# chatsite/asgi.py
+import os
+
+from channels.routing import ProtocolTypeRouter
+from django.core.asgi import get_asgi_application
+
+os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'chatsite.settings')
+
+application = ProtocolTypeRouter({
+    "http": get_asgi_application(),
+    # Just HTTP for now. (We can add other protocols later.)
+})
+```
+
+Что мы сделали? Мы сказали нашему приложению, что мы планируем разные протоколы, обрабатывать по разному, в данный
+момент, мы указали только протокол `http`, а значит что фактически, пока что, ничего не изменится
+
+Добавляем приложение в `INSTALLED_APPS`:
+
+```python
+INSTALLED_APPS = [
+    'daphne',
+    'chat',
+    'django.contrib.admin',
+    'django.contrib.auth',
+    'django.contrib.contenttypes',
+    'django.contrib.sessions',
+    'django.contrib.messages',
+    'django.contrib.staticfiles',
+]
+```
+
+И добавляем настройку, что бы указать, что основной сервер был `asgi.py`
+
+```python
+# mysite/settings.py
+# Channels
+ASGI_APPLICATION = 'chatsite.asgi.application'
+```
+
+Теперь при запуске приложения вы должны увидеть немного другую надпись.
+
+```
+Watching for file changes with StatReloader
+Performing system checks...
+
+System check identified no issues (0 silenced).
+
+You have 18 unapplied migration(s). Your project may not work properly until you apply the migrations for app(s): admin, auth, contenttypes, sessions.
+Run 'python manage.py migrate' to apply them.
+August 19, 2022 - 10:20:28
+Django version 4.1, using settings 'mysite.settings'
+Starting ASGI/Daphne version 3.0.2 development server at http://127.0.0.1:8000/
+Quit the server with CONTROL-C.
+```
+
+Обратите внимание, предпоследняя строка, теперь сервер запущен с поддержкой веб сокетов.
+
+### Создаём страницу с конкретным чатом
+
+Создадим html, `room.html`
 
 ```html
-{% if messages %}
-<ul class="messages">
-    {% for message in messages %}
-    <li
-            {% if message.tags %} class="{{ message.tags }}" {% endif %}>
-        {% if message.level == DEFAULT_MESSAGE_LEVELS.ERROR %}Important: {% endif %}
-        {{ message }}
-    </li>
-    {% endfor %}
-</ul>
-{% endif %}
+<!-- chat/templates/chat/room.html -->
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8"/>
+    <title>Chat Room</title>
+</head>
+<body>
+<textarea id="chat-log" cols="100" rows="20"></textarea><br>
+<input id="chat-message-input" type="text" size="100"><br>
+<input id="chat-message-submit" type="button" value="Send">
+{{ room_name|json_script:"room-name" }}
+<script>
+    const roomName = JSON.parse(document.getElementById('room-name').textContent);
+
+    const chatSocket = new WebSocket(
+            'ws://'
+            + window.location.host
+            + '/ws/chat/'
+            + roomName
+            + '/'
+    );
+
+    chatSocket.onmessage = function (e) {
+        const data = JSON.parse(e.data);
+        document.querySelector('#chat-log').value += (data.message + '\n');
+    };
+
+    chatSocket.onclose = function (e) {
+        console.error('Chat socket closed unexpectedly');
+    };
+
+    document.querySelector('#chat-message-input').focus();
+    document.querySelector('#chat-message-input').onkeyup = function (e) {
+        if (e.keyCode === 13) {  // enter, return
+            document.querySelector('#chat-message-submit').click();
+        }
+    };
+
+    document.querySelector('#chat-message-submit').onclick = function (e) {
+        const messageInputDom = document.querySelector('#chat-message-input');
+        const message = messageInputDom.value;
+        chatSocket.send(JSON.stringify({
+            'message': message
+        }));
+        messageInputDom.value = '';
+    };
+</script>
+</body>
+</html>
 ```
 
-Чаще всего такой код располагают в блоке в базовом шаблоне, что-бы не указывать его на каждой странице отдельно.
+Что происходит на этой странице?
 
-#### Использование во view
+Текстовое поле для отображения записей в чате. Поле для ввода нового сообщения. Кнопка для отправки.
 
-Если нам вдруг необходимо получить список текущих сообщение во view, мы можем это сделать, при помощи
-метода `get_messages`
+```{{ room_name|json_script:"room-name" }}```
 
-```python
-from django.contrib.messages import get_messages
+Фильтр json_script Добавит на страницу тег скрипт с данными из переменной, если открыть комнату с названием `test` то
+отрендереная страница будет выглядеть так:
 
-storage = get_messages(request)
-for message in storage:
-    do_something_with_the_message(message)
+![](https://djangoalevel.s3.eu-central-1.amazonaws.com/lesson44/room_script.png)
+
+Нужно для того, что бы считать переменную через JS.
+
+Что происходит в JS?
+
+В первой строке мы считываем из переменной имя комнаты.
+
+И создаём соединение с веб сокетом по адресу (`ws://127.0.0.1:8000/ws/chat/<имя чата>/`), мы создадим серверную часть
+дальше. Обратите внимание, используется другой протокол не `http`. При создании такого объекта, запрос на соединение
+отправляется автоматически.
+
+Если по этому сокету приходит сообщение, то мы добавляем его к нашему месту для текста
+
+```js
+chatSocket.onmessage = function (e) {
+    const data = JSON.parse(e.data);
+    document.querySelector('#chat-log').value += (data.message + '\n');
+};
 ```
 
-### Messages и class-base view
+Если соединение было разорвано, отписать в консоль ошибку
 
-Можно добавлять сообщения через миксины, примеры:
+```js
+chatSocket.onclose = function (e) {
+    console.error('Chat socket closed unexpectedly');
+};
+```
+
+В случае отправки сообщения, отправить его по сокету.
+
+```js
+document.querySelector('#chat-message-submit').onclick = function (e) {
+    const messageInputDom = document.querySelector('#chat-message-input');
+    const message = messageInputDom.value;
+    chatSocket.send(JSON.stringify({
+        'message': message
+    }));
+    messageInputDom.value = '';
+};
+```
+
+И создать view.
 
 ```python
-from django.contrib.messages.views import SuccessMessageMixin
-from django.views.generic.edit import CreateView
-from myapp.models import Author
+from django.views.generic import TemplateView
 
 
-class AuthorCreate(SuccessMessageMixin, CreateView):
-    model = Author
-    success_url = '/success/'
-    success_message = "%(name)s was created successfully"
+class Room(TemplateView):
+    template_name = 'room.html'
+```
+
+`urls.py`:
+
+```python
+# chat/urls.py
+from django.urls import path
+
+from chat.views import Index, Room
+
+urlpatterns = [
+    path('', Index.as_view(), name='index'),
+    path('<str:room_name>/', Room.as_view(), name='room'),
+]
+```
+
+Запускаем сервер, заходим в любую комнату, пишем любое сообщение и видим ошибку.
+
+```WebSocket connection to 'ws://127.0.0.1:8000/ws/chat/lobby/' failed: Unexpected response code: 500```
+
+Мы не создали бекэнд для сокета. Давайте сделаем это.
+
+### Бекэнд сокета
+
+Создадим новый файл `chat/consumers.py`
+
+```
+    __init__.py
+    consumers.py
+    urls.py
+    views.py
 ```
 
 ```python
-from django.contrib.messages.views import SuccessMessageMixin
-from django.views.generic.edit import CreateView
-from myapp.models import ComplicatedModel
+# chat/consumers.py
+import json
+from channels.generic.websocket import WebsocketConsumer
 
 
-class ComplicatedCreate(SuccessMessageMixin, CreateView):
-    model = ComplicatedModel
-    success_url = '/success/'
-    success_message = "%(calculated_field)s was created successfully"
+class ChatConsumer(WebsocketConsumer):
+    def connect(self):
+        self.accept()
 
-    def get_success_message(self, cleaned_data):
-        return self.success_message % dict(
-            cleaned_data,
-            calculated_field=self.object.calculated_field,
+    def disconnect(self, close_code):
+        pass
+
+    def receive(self, text_data):
+        text_data_json = json.loads(text_data)
+        message = text_data_json['message']
+
+        self.send(text_data=json.dumps({
+            'message': message
+        }))
+```
+
+Что это такое? Это класс для работы с веб сокетом.
+
+Методы:
+
+- connect - Что делать при запросе на соединение.
+
+- disconnect - Что делать при разрыве соединения.
+
+- receive - Что делать при приходе сообщения.
+
+- send - Отправить сообщение всем кто подключён (включая отправителя, вообще всем).
+
+Создаём новый файл для урлов веб сокета `routing.py`.
+
+```
+chat/
+    __init__.py
+    consumers.py
+    routing.py
+    urls.py
+    views.py
+```
+
+```python
+# chat/routing.py
+from django.urls import path
+from .comsumer import ChatConsumer
+
+websocket_urlpatterns = [
+    path('ws/chat/<str:room_name>/', ChatConsumer.as_asgi(), name='room'),
+]
+```
+
+Обратите внимание к классу был применён метод `as_asgi`, это аналогия `as_view` для обычных классов.
+
+Укажем эту переменную в нашем `asgi.py`:
+
+```python
+# chatsite/asgi.py
+import os
+
+from channels.auth import AuthMiddlewareStack
+from channels.routing import ProtocolTypeRouter, URLRouter
+from channels.security.websocket import AllowedHostsOriginValidator
+from django.core.asgi import get_asgi_application
+
+os.environ.setdefault("DJANGO_SETTINGS_MODULE", "mysite.settings")
+# Initialize Django ASGI application early to ensure the AppRegistry
+# is populated before importing code that may import ORM models.
+django_asgi_app = get_asgi_application()
+
+from chat.routing import websocket_urlpatterns
+
+application = ProtocolTypeRouter(
+    {
+        "http": django_asgi_app,
+        "websocket": AllowedHostsOriginValidator(
+            AuthMiddlewareStack(URLRouter(websocket_urlpatterns))
+        ),
+    }
+)
+```
+
+Обратите внимание, мы добавили новый протокол для обработки.
+
+Для того, что бы сокет работал необходимы сессии, а для этого необходимо провести миграции.
+
+```python manage.py migrate```
+
+Проверяем, это уже будет работать.
+
+**В данный момент работать будет только один чат, причем только сам с собой!!!**
+
+Мы не добавили возможность создавать разные сокеты, для разных страниц. Для этого необходимо разделить данные по слоям.
+
+### Подключаем channels
+
+Для того что бы использовать различные не пересекающиеся чаты, мы будем использовать `group`, `group` это
+набор `channel`.
+
+Для использования необходимо какое-либо внешнее хранилище. Мы будем использовать Redis.
+
+Для этого необходимо установить еще один внешний модуль, для взаимодействия между нашими слоями и редисом.
+
+```pip install channels_redis```
+
+### Для пользователей Windows
+
+На windows обычный редис не будет работать с последними версиями django-channels.
+
+Необходимо установить [это](https://www.memurai.com/get-memurai) и запустить в консоли после:
+
+```memurai```
+
+Это аналог Redis, который будет работать
+
+### Обновление settings
+
+Необходимо обновить настройки и указать, что мы будем использовать redis:
+
+```python
+# chatsite/settings.py
+# Channels
+ASGI_APPLICATION = 'mysite.asgi.application'
+CHANNEL_LAYERS = {
+    'default': {
+        'BACKEND': 'channels_redis.core.RedisChannelLayer',
+        'CONFIG': {
+            "hosts": [('127.0.0.1', 6379)],
+        },
+    },
+}
+```
+
+Для проверки работы редиса необходимо открыть `shell`:
+
+```python manage.py shell```
+
+```python
+import channels.layers
+
+channel_layer = channels.layers.get_channel_layer()
+from asgiref.sync import async_to_sync
+
+async_to_sync(channel_layer.send)('test_channel', {'type': 'hello'})
+async_to_sync(channel_layer.receive)('test_channel')
+{'type': 'hello'}
+```
+
+Напоминаю, изначально вебсокеты это асинхронная технология. Для использования её синхронно, мы будем использовать
+встроенный метод `async_to_sync`.
+
+В тесте мы отправили сообщение и получили его.
+
+Теперь можно обновить `consumers.py`:
+
+```python
+# chat/consumers.py
+import json
+from asgiref.sync import async_to_sync
+from channels.generic.websocket import WebsocketConsumer
+
+
+class ChatConsumer(WebsocketConsumer):
+    def connect(self):
+        self.room_name = self.scope['url_route']['kwargs']['room_name']
+        self.room_group_name = 'chat_%s' % self.room_name
+
+        # Join room group
+        async_to_sync(self.channel_layer.group_add)(
+            self.room_group_name,
+            self.channel_name
         )
+
+        self.accept()
+
+    def disconnect(self, close_code):
+        # Leave room group
+        async_to_sync(self.channel_layer.group_discard)(
+            self.room_group_name,
+            self.channel_name
+        )
+
+    # Receive message from WebSocket
+    def receive(self, text_data):
+        text_data_json = json.loads(text_data)
+        message = text_data_json['message']
+
+        # Send message to room group
+        async_to_sync(self.channel_layer.group_send)(
+            self.room_group_name,
+            {
+                'type': 'chat_message',
+                'message': message
+            }
+        )
+
+    # Receive message from room group
+    def chat_message(self, event):
+        message = event['message']
+
+        # Send message to WebSocket
+        self.send(text_data=json.dumps({
+            'message': message
+        }))
 ```
 
-Практика:
+Методы:
 
-1. Задания с прошлого занятия изменить так, что бы логика работала не на одной конкретной странице, а вообще на любой.
+`connect` - добавили создание группы, исходя из названия чата, и так же вызвали метод `accept`
 
-2. Для прошлого задания сделать вывод текста не на странице, а при помощи `messages`
+`disconnect` - удаляем группу при разрыве соединения
 
-3. Прошлое задание сделать не для всех страниц, а только для любых двух (на ваш выбор). 
+`receive` - При получении сообщения мы выполняем для всей группы, метода `chat_message` могли назвать абсолютно как
+угодно.
+
+`chat_message` - отправка сообщения
+
+Можем проверять. Открываем одинаковые названия чата в разных браузерах и пишем по сообщению с каждого
+
+## Запускаем всё асинхронно
+
+Допустим мы хотим отправить другу большой файл, но мы хотим писать сообщения пока файл загружается. В случае
+использования синхронного подхода, это невозможно, при асинхронном, это будет работать.
+
+Перепишем `consumers.py`
+
+```python
+# chat/consumers.py
+import json
+from channels.generic.websocket import AsyncWebsocketConsumer
+
+
+class ChatConsumer(AsyncWebsocketConsumer):
+    async def connect(self):
+        self.room_name = self.scope['url_route']['kwargs']['room_name']
+        self.room_group_name = 'chat_%s' % self.room_name
+
+        # Join room group
+        await self.channel_layer.group_add(
+            self.room_group_name,
+            self.channel_name
+        )
+
+        await self.accept()
+
+    async def disconnect(self, close_code):
+        # Leave room group
+        await self.channel_layer.group_discard(
+            self.room_group_name,
+            self.channel_name
+        )
+
+    # Receive message from WebSocket
+    async def receive(self, text_data):
+        text_data_json = json.loads(text_data)
+        message = text_data_json['message']
+
+        # Send message to room group
+        await self.channel_layer.group_send(
+            self.room_group_name,
+            {
+                'type': 'chat_message',
+                'message': message
+            }
+        )
+
+    # Receive message from room group
+    async def chat_message(self, event):
+        message = event['message']
+
+        # Send message to WebSocket
+        await self.send(text_data=json.dumps({
+            'message': message
+        }))
+```
+
+Что мы изменили? Мы наследовались не от `WebsocketConsumer`, а от `AsyncWebsocketConsumer`, заменили все функции с
+обычных на асинхронные, и вызов функций с обычного на асинхронные.
+
+Всё, ваш чат полностью асинхронен.
+
+### Тестирование
+
+Для тестирования веб сокетов используются специфический ацептанс тесты.
+
+> Для этих тестов, необходимо предварительно установить Google Chrome, chromedriver и селениум. И только последний
+> ставится через `pip`
+
+```
+pip install selenium
+```
+
+Создадим файл `chat/tests.py`
+
+Текущая структура файлов
+
+```
+chat/
+    __init__.py
+    consumers.py
+    routing.py
+    templates/
+        chat/
+            index.html
+            room.html
+    tests.py
+    urls.py
+    views.py
+```
+
+Содержимое файла:
+
+```python
+# chat/tests.py
+from channels.testing import ChannelsLiveServerTestCase
+from selenium import webdriver
+from selenium.webdriver.common.action_chains import ActionChains
+from selenium.webdriver.common.by import By
+from selenium.webdriver.common.keys import Keys
+from selenium.webdriver.support.wait import WebDriverWait
+
+
+class ChatTests(ChannelsLiveServerTestCase):
+    serve_static = True  # emulate StaticLiveServerTestCase
+
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        try:
+            # NOTE: Requires "chromedriver" binary to be installed in $PATH
+            cls.driver = webdriver.Chrome()
+        except:
+            super().tearDownClass()
+            raise
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.driver.quit()
+        super().tearDownClass()
+
+    def test_when_chat_message_posted_then_seen_by_everyone_in_same_room(self):
+        try:
+            self._enter_chat_room("room_1")
+
+            self._open_new_window()
+            self._enter_chat_room("room_1")
+
+            self._switch_to_window(0)
+            self._post_message("hello")
+            WebDriverWait(self.driver, 2).until(
+                lambda _: "hello" in self._chat_log_value,
+                "Message was not received by window 1 from window 1",
+            )
+            self._switch_to_window(1)
+            WebDriverWait(self.driver, 2).until(
+                lambda _: "hello" in self._chat_log_value,
+                "Message was not received by window 2 from window 1",
+            )
+        finally:
+            self._close_all_new_windows()
+
+    def test_when_chat_message_posted_then_not_seen_by_anyone_in_different_room(self):
+        try:
+            self._enter_chat_room("room_1")
+
+            self._open_new_window()
+            self._enter_chat_room("room_2")
+
+            self._switch_to_window(0)
+            self._post_message("hello")
+            WebDriverWait(self.driver, 2).until(
+                lambda _: "hello" in self._chat_log_value,
+                "Message was not received by window 1 from window 1",
+            )
+
+            self._switch_to_window(1)
+            self._post_message("world")
+            WebDriverWait(self.driver, 2).until(
+                lambda _: "world" in self._chat_log_value,
+                "Message was not received by window 2 from window 2",
+            )
+            self.assertTrue(
+                "hello" not in self._chat_log_value,
+                "Message was improperly received by window 2 from window 1",
+            )
+        finally:
+            self._close_all_new_windows()
+
+    # === Utility ===
+
+    def _enter_chat_room(self, room_name):
+        self.driver.get(self.live_server_url + "/chat/")
+        ActionChains(self.driver).send_keys(room_name, Keys.ENTER).perform()
+        WebDriverWait(self.driver, 2).until(
+            lambda _: room_name in self.driver.current_url
+        )
+
+    def _open_new_window(self):
+        self.driver.execute_script('window.open("about:blank", "_blank");')
+        self._switch_to_window(-1)
+
+    def _close_all_new_windows(self):
+        while len(self.driver.window_handles) > 1:
+            self._switch_to_window(-1)
+            self.driver.execute_script("window.close();")
+        if len(self.driver.window_handles) == 1:
+            self._switch_to_window(0)
+
+    def _switch_to_window(self, window_index):
+        self.driver.switch_to.window(self.driver.window_handles[window_index])
+
+    def _post_message(self, message):
+        ActionChains(self.driver).send_keys(message, Keys.ENTER).perform()
+
+    @property
+    def _chat_log_value(self):
+        return self.driver.find_element(
+            by=By.CSS_SELECTOR, value="#chat-log"
+        ).get_property("value")
+```
+
+> Для тестов должна быть указана дополнительная настройка для базы данных!
+
+```python
+# mysite/settings.py
+DATABASES = {
+    "default": {
+        "ENGINE": "django.db.backends.sqlite3",
+        "NAME": BASE_DIR / "db.sqlite3",
+        "TEST": {
+            "NAME": BASE_DIR / "db.sqlite3",
+        },
+    }
+}
+```
+
+Запускаем и наслаждаемся
+
+```
+python3 manage.py test chat.tests
+```
